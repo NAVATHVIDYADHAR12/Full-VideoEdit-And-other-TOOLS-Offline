@@ -512,7 +512,20 @@
             <option value="220">220 DPI — sharp, larger</option>
           </select>
           <div class="hint">Only for page-image output</div></div>
+        <div><label>Pictures</label>
+          <select data-el="images">
+            <option value="1" selected>Pull images out as real pictures</option>
+            <option value="0">Skip images, text only</option>
+          </select>
+          <div class="hint">Editable-text mode</div></div>
+        <div><label>Tables</label>
+          <select data-el="tables">
+            <option value="1" selected>Rebuild them as real Word tables</option>
+            <option value="0">Leave as plain paragraphs</option>
+          </select>
+          <div class="hint">Detected from column alignment</div></div>
       </div>
+      <div class="note hide" data-el="analysis" style="margin-top:16px"></div>
       <div class="row" style="margin-top:16px">
         <button data-el="go">Convert →</button>
         <button class="ghost" data-el="another">Choose another file</button>

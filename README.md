@@ -89,11 +89,15 @@ That means zero quality loss and near-instant completion regardless of video len
 
 **PDF to Word** comes in two modes because there is a genuine trade-off:
 
-- **Editable text** reads the PDF's positioned glyphs, groups them into lines, then into
-  paragraphs, and infers headings from font size and bold/italic from font names. You get a
-  real, editable Word document — but multi-column layouts and tables flatten into ordinary
-  paragraphs. No browser can recover structure a PDF never stored; PDFs hold positioned
-  glyphs, not documents.
+- **Editable text** rebuilds real document structure from the PDF's positioned glyphs and
+  image XObjects. Paragraphs are recovered from line geometry, each run keeps its own
+  bold/italic/size, embedded pictures are pulled out as real Word images, and column-aligned
+  rows are rebuilt as real `<w:tbl>` tables. Everything is a genuine Word object you can
+  click and edit.
+  What it cannot recover: vector drawings and text boxes, which a PDF stores as drawing
+  commands rather than objects. And a **scanned PDF has no text inside it at all** — the
+  words are pixels. The tool inspects the file first and says so rather than silently
+  producing an empty document; that case needs OCR, which this app does not do.
 - **Exact look** renders each page to an image and places it full-bleed in the document. It
   looks identical to the PDF, but the text cannot be edited or selected.
 
@@ -137,6 +141,6 @@ server.js         static server that sends COOP/COEP for multithreading
 - Asking for 30 fps from a 24 fps source gives duplicated frames. That's inherent.
 - A watermark that moves needs a box covering its full range of motion.
 - Very large videos are held in browser memory; multi-GB files may run out.
-- PDF → Word cannot recover tables or columns as real Word tables; see above.
+- PDF → Word cannot recover vector drawings or text boxes; scanned PDFs need OCR.
 - PowerPoint and legacy .doc are not supported at all.
 - The built-in PDF fonts cover Latin only; other scripts become "?" and are reported.

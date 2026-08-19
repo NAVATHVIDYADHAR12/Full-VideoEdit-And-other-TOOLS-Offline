@@ -240,7 +240,40 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
     p.q('info').innerHTML = '<span>File <b>' + escapeHtml(f.name) + '</b></span><span>Size <b>' +
       fmtBytes(f.size) + '</b></span><span>Type <b>' + k.toUpperCase() + '</b></span>';
     p.q('pick').classList.add('hide');
+    p.q('analysis').classList.add('hide');
     p.step('body');
+    if (k === 'pdf') inspect(f);
+  }
+
+  /* Look inside the PDF and say what is actually in there, so a scanned
+     document is obvious before you spend time converting it. */
+  async function inspect(f){
+    const box = p.q('analysis');
+    box.className = 'note';
+    box.classList.remove('hide');
+    box.textContent = 'Looking inside the PDF…';
+    try {
+      const s = await L.analyzePdf(await bytesOf(f));
+      const scope = s.sampled < s.pages ? ' (first ' + s.sampled + ' of ' + s.pages + ' pages)' : '';
+      if (s.scanned){
+        box.className = 'note';
+        box.innerHTML = '⚠ <b>This is a scanned PDF.</b> Its pages are photographs — ' +
+          s.images + ' image(s) and <b>no text at all</b>' + scope + '.<br>' +
+          'The words exist only as pixels, so there is nothing to make editable. ' +
+          '<b>Editable-text mode will not work on this file.</b> ' +
+          'Choose <b>“exact look”</b>, or run the file through an OCR tool first.';
+        p.q('format').value = 'docx-image';
+        p.q('format').onchange();
+      } else {
+        box.className = 'note ok';
+        box.innerHTML = '🔎 Found <b>' + s.textItems.toLocaleString() + '</b> text items and <b>' +
+          s.images + '</b> embedded image(s) across ' + s.pages + ' page(s)' + scope +
+          '. This is a real text PDF, so <b>editable-text mode will work</b>.';
+      }
+    } catch(e){
+      box.className = 'note';
+      box.textContent = 'Could not inspect this PDF (' + e.message + ') — you can still try converting it.';
+    }
   }
 
   p.q('format').onchange = () => {
@@ -264,21 +297,42 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
       const base = baseName(file.name);
 
       if (fmt === 'docx-text'){
-        p.stat('Reading the PDF text…');
-        const { blocks } = await L.pdfToBlocks(bytes, v => p.prog(v*0.7));
+        p.stat('Reading text, images and tables out of the PDF…');
+        const { blocks, stats } = await L.pdfToBlocks(bytes, v => p.prog(v*0.7), {
+          tables: p.q('tables').value === '1',
+          images: p.q('images').value === '1',
+        });
+
+        if (!stats.textItems && !stats.images)
+          throw new Error('This PDF contains no extractable text or images at all.');
+
+        if (!stats.textItems){
+          throw new Error(
+            'This is a scanned PDF — every page is a photograph, with no text stored inside it.\n\n' +
+            'There is nothing to make editable: the words exist only as pixels. Converting it would ' +
+            'need OCR (optical character recognition), which this app does not do.\n\n' +
+            'Use "Word (.docx) — exact look" instead to get the pages placed in a document.');
+        }
+
         p.stat('Building the Word document…');
         await idle();
-        const dblocks = blocks.map(b => b.type === 'pagebreak' ? { type:'pagebreak' } : ({
-          type:'p', style:b.style, spaceAfter:b.spaceAfter || 6,
-          runs:[{ text:b.text, bold:b.bold, italic:b.italic, size: b.style ? undefined : b.size }]
-        }));
+        // pdfToBlocks already emits paragraphs-with-runs, tables and images;
+        // only the image field name differs from what the docx builder wants
+        const dblocks = blocks.map(b => b.type === 'image'
+          ? { type:'image', data:b.bytes, ext:'png', widthPt:b.widthPt, heightPt:b.heightPt }
+          : b);
         outBlob = await Docx.build({ blocks: dblocks });
         outName = base + '.docx';
-        finish('✅ Converted to an editable Word document — <b>' + fmtBytes(outBlob.size) + '</b>, ' +
-          dblocks.filter(b => b.type === 'p').length + ' paragraphs.<br>' +
-          '<span style="opacity:.8">Text, headings, sizes and bold/italic are reconstructed. ' +
-          'Multi-column layouts and tables become ordinary paragraphs — no browser can recover ' +
-          'structure a PDF never stored.</span>');
+
+        const paras = dblocks.filter(b => b.type === 'p').length;
+        finish('✅ Converted to an editable Word document — <b>' + fmtBytes(outBlob.size) + '</b>.<br>' +
+          'Recovered <b>' + paras + '</b> paragraph' + (paras===1?'':'s') +
+          ', <b>' + stats.images + '</b> image' + (stats.images===1?'':'s') +
+          ' and <b>' + stats.tables + '</b> table' + (stats.tables===1?'':'s') +
+          ' across ' + stats.pages + ' page' + (stats.pages===1?'':'s') + '.<br>' +
+          '<span style="opacity:.8">Every paragraph, picture and table is a real Word object you can ' +
+          'click and edit. Bold, italic and font sizes are preserved per run. Vector drawings and ' +
+          'text boxes are not recoverable — a PDF stores them as drawing commands, not objects.</span>');
 
       } else if (fmt === 'docx-image'){
         p.stat('Rendering the pages…');

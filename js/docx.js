@@ -67,6 +67,26 @@ async function build(o){
       continue;
     }
 
+    if (b.type === 'table' && b.rows && b.rows.length){
+      const cols = Math.max(...b.rows.map(r => r.length));
+      const colW = Math.floor((page.w - margin*2) / cols);
+      const border = ['top','left','bottom','right','insideH','insideV']
+        .map(s => '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="9AA4B2"/>').join('');
+      body.push(
+        '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>' + border + '</w:tblBorders></w:tblPr>' +
+        '<w:tblGrid>' + Array(cols).fill('<w:gridCol w:w="' + colW + '"/>').join('') + '</w:tblGrid>' +
+        b.rows.map((row, ri) =>
+          '<w:tr>' + Array.from({ length: cols }, (_, ci) => {
+            const cell = row[ci] == null ? '' : String(row[ci]);
+            const strong = b.headerRow && ri === 0;
+            return '<w:tc><w:tcPr><w:tcW w:w="' + colW + '" w:type="dxa"/></w:tcPr>' +
+                   '<w:p><w:r>' + (strong ? '<w:rPr><w:b/></w:rPr>' : '') +
+                   '<w:t xml:space="preserve">' + esc(cell) + '</w:t></w:r></w:p></w:tc>';
+          }).join('') + '</w:tr>').join('') +
+        '</w:tbl><w:p/>');    // Word requires a paragraph after a table
+      continue;
+    }
+
     if (b.type === 'image' && b.data){
       const ext = (b.ext || 'png').toLowerCase();
       const rid = 'rId' + (++ridSeq);

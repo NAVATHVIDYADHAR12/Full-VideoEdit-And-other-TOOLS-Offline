@@ -7,8 +7,8 @@
 (function () {
 'use strict';
 
-const C = window.Core, Docx = window.Docx, Zip = window.Zip;
-const { el, fmtBytes, escapeHtml, baseName, download, makePicker, buildZip, crc32, idle } = C;
+const C = window.Core;
+const { el, fmtBytes, escapeHtml, idle } = C;
 
 /* ================= lazy library loading ================= */
 const loaded = {};
@@ -35,7 +35,6 @@ const need = {
 };
 
 /* ================= shared helpers ================= */
-const PT_PER_TWIP = 1/20;
 const extOf = n => (String(n).match(/\.([^.]+)$/) || [,''])[1].toLowerCase();
 const isPdf = f => extOf(f.name) === 'pdf';
 const isImg = f => /^(jpe?g|png|gif|bmp|webp)$/.test(extOf(f.name));
@@ -112,13 +111,35 @@ async function blocksToPdf(blocks, opt){
     if (b.type === 'pagebreak'){ newPage(); continue; }
 
     if (b.type === 'image' && b.bytes){
-      const img = b.ext === 'png' ? await pdf.embedPng(b.bytes) : await pdf.embedJpg(b.bytes);
+      let img;
+      try {
+        img = b.ext === 'png' ? await pdf.embedPng(b.bytes) : await pdf.embedJpg(b.bytes);
+      } catch(_){ continue; }
       const maxW = W - M*2, maxH = H - M*2;
       const sc = Math.min(maxW / img.width, maxH / img.height, 1);
       const w = img.width*sc, h = img.height*sc;
       if (y - h < M) newPage();
       page.drawImage(img, { x:(W-w)/2, y:y-h, width:w, height:h });
       y -= h + 12;
+      continue;
+    }
+
+    if (b.type === 'table' && b.rows && b.rows.length){
+      const cols = Math.max(...b.rows.map(r => r.length));
+      const cw = (W - M*2) / cols;
+      const size = 9, lead = size * 1.3;
+      for (let ri = 0; ri < b.rows.length; ri++){
+        if (y - lead < M) newPage();
+        const row = b.rows[ri];
+        const font = (b.headerRow && ri === 0) ? F.bold : F.reg;
+        for (let ci = 0; ci < cols; ci++){
+          let cell = toWinAnsi(row[ci] == null ? '' : row[ci], dropped);
+          while (cell && font.widthOfTextAtSize(cell, size) > cw - 6) cell = cell.slice(0, -1);
+          page.drawText(cell, { x: M + ci*cw + 3, y: y - size, size, font, color: rgb(0,0,0) });
+        }
+        y -= lead;
+      }
+      y -= 8;
       continue;
     }
 
@@ -129,7 +150,6 @@ async function blocksToPdf(blocks, opt){
 
     if (!text.trim()){ y -= lead * 0.6; continue; }
 
-    // greedy word wrap
     const maxW = W - M*2 - (b.indent || 0);
     const words = text.split(/\s+/);
     let line = '';
@@ -159,27 +179,25 @@ async function blocksToPdf(blocks, opt){
 function htmlToBlocks(html){
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const blocks = [];
-  const walk = (node, inherited) => {
+  const walk = node => {
     for (const child of node.children){
       const tag = child.tagName.toLowerCase();
       const txt = child.textContent.replace(/\s+/g,' ').trim();
       if (/^h[1-6]$/.test(tag)){
         const lvl = +tag[1];
-        blocks.push({ text:txt, size: [22,18,15,13,12,11][lvl-1], bold:true, spaceAfter:8, style:'Heading'+Math.min(3,lvl) });
+        blocks.push({ text:txt, size:[22,18,15,13,12,11][lvl-1], bold:true, spaceAfter:8,
+                      style:'Heading' + Math.min(3,lvl) });
       } else if (tag === 'p'){
         if (txt) blocks.push({ text:txt, size:11, spaceAfter:6 });
       } else if (tag === 'li'){
         blocks.push({ text:'• ' + txt, size:11, indent:18, spaceAfter:2 });
       } else if (tag === 'ul' || tag === 'ol' || tag === 'div' || tag === 'section'){
-        walk(child, inherited);
+        walk(child);
       } else if (tag === 'table'){
-        for (const tr of child.querySelectorAll('tr')){
-          const cells = [...tr.children].map(td => td.textContent.replace(/\s+/g,' ').trim());
-          blocks.push({ text: cells.join('   |   '), size:10, spaceAfter:2 });
-        }
-        blocks.push({ text:'', size:10 });
+        const rows = [...child.querySelectorAll('tr')].map(tr =>
+          [...tr.children].map(td => td.textContent.replace(/\s+/g,' ').trim()));
+        if (rows.length) blocks.push({ type:'table', rows, headerRow:true });
       } else if (tag === 'img'){
-        // mammoth inlines images as data: URIs
         const src = child.getAttribute('src') || '';
         const m = src.match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
         if (m){
@@ -193,95 +211,313 @@ function htmlToBlocks(html){
       }
     }
   };
-  walk(doc.body, {});
+  walk(doc.body);
   return blocks;
 }
 
-/* ================= PDF -> structured content ================= */
-/** Reconstruct paragraphs from a PDF's positioned glyphs. */
-async function pdfToBlocks(bytes, onProgress){
+/* ================= PDF -> structured content =================
+ * A PDF stores positioned glyphs and image XObjects, not paragraphs. This
+ * rebuilds structure from that: runs keep their own bold/italic/size, embedded
+ * images are pulled out as real pictures, and column-aligned rows become tables.
+ */
+
+/** Multiply two PDF transform matrices [a,b,c,d,e,f]. */
+function mul(m, n){
+  return [
+    m[0]*n[0] + m[2]*n[1],  m[1]*n[0] + m[3]*n[1],
+    m[0]*n[2] + m[2]*n[3],  m[1]*n[2] + m[3]*n[3],
+    m[0]*n[4] + m[2]*n[5] + m[4],  m[1]*n[4] + m[3]*n[5] + m[5]
+  ];
+}
+
+/** Resolve a pdf.js object that may not have arrived yet. */
+function getObj(page, name){
+  return new Promise(resolve => {
+    let done = false;
+    const finish = v => { if (!done){ done = true; resolve(v || null); } };
+    try {
+      if (page.objs.has && page.objs.has(name)) return finish(page.objs.get(name));
+      page.objs.get(name, finish);
+      setTimeout(() => finish(null), 4000);
+    } catch(_){ finish(null); }
+  });
+}
+
+/** pdf.js image object -> canvas. */
+function imageToCanvas(img){
+  if (!img) return null;
+  const w = img.width, h = img.height;
+  if (!w || !h) return null;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+
+  if (img.bitmap){                        // newer pdf.js hands back an ImageBitmap
+    ctx.drawImage(img.bitmap, 0, 0);
+    return cv;
+  }
+  const src = img.data;
+  if (!src) return null;
+  const id = ctx.createImageData(w, h), dst = id.data, n = w*h;
+  if (src.length === n*4) dst.set(src);
+  else if (src.length === n*3){
+    for (let i = 0, j = 0; i < n; i++){
+      dst[i*4] = src[j++]; dst[i*4+1] = src[j++]; dst[i*4+2] = src[j++]; dst[i*4+3] = 255;
+    }
+  } else if (src.length === n){
+    for (let i = 0; i < n; i++){ dst[i*4] = dst[i*4+1] = dst[i*4+2] = src[i]; dst[i*4+3] = 255; }
+  } else return null;
+  ctx.putImageData(id, 0, 0);
+  return cv;
+}
+
+/** Walk a page's operator list, pulling out every painted raster image and where it sits. */
+async function extractImages(page, pdfjs){
+  const OPS = pdfjs.OPS;
+  let ops;
+  try { ops = await page.getOperatorList(); } catch(_){ return []; }
+
+  const found = [];
+  let ctm = [1,0,0,1,0,0];
+  const stack = [];
+  for (let i = 0; i < ops.fnArray.length; i++){
+    const fn = ops.fnArray[i], args = ops.argsArray[i];
+    if (fn === OPS.save) stack.push(ctm.slice());
+    else if (fn === OPS.restore) ctm = stack.pop() || [1,0,0,1,0,0];
+    else if (fn === OPS.transform) ctm = mul(ctm, args);
+    else if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject)
+      found.push({ name: args[0], m: ctm.slice() });
+    else if (fn === OPS.paintInlineImageXObject)
+      found.push({ obj: args[0], m: ctm.slice() });
+  }
+
+  const out = [];
+  for (const f of found){
+    try {
+      const img = f.obj || await getObj(page, f.name);
+      const cv = imageToCanvas(img);
+      if (!cv) continue;
+      const wPt = Math.hypot(f.m[0], f.m[1]);
+      const hPt = Math.hypot(f.m[2], f.m[3]);
+      if (wPt < 8 || hPt < 8) continue;              // rules, bullets, spacer pixels
+      const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+      if (!blob) continue;
+      out.push({
+        bytes: new Uint8Array(await blob.arrayBuffer()), ext:'png',
+        widthPt: wPt, heightPt: hPt,
+        x: f.m[4], y: f.m[5],                        // PDF origin is bottom-left
+        top: f.m[5] + hPt
+      });
+    } catch(_){ /* one bad image must not sink the page */ }
+  }
+  return out;
+}
+
+/** Recover tables from lines whose items share the same column positions. */
+function detectTables(lines){
+  const isRow = l => {
+    if (l.items.length < 2) return false;
+    for (let k = 1; k < l.items.length; k++)
+      if (l.items[k].x - (l.items[k-1].x + l.items[k-1].w) > l.size * 1.2) return true;
+    return false;
+  };
+  const spans = [];
+  let i = 0;
+  while (i < lines.length){
+    if (!isRow(lines[i])){ i++; continue; }
+    let j = i;
+    while (j + 1 < lines.length && isRow(lines[j+1])) j++;
+
+    if (j - i + 1 >= 3){
+      const rows = lines.slice(i, j+1);
+      const xs = [];
+      rows.forEach(r => r.items.forEach(it => xs.push(it.x)));
+      xs.sort((a,b) => a-b);
+      const tol = Math.max(6, rows[0].size * 1.1);
+      const cols = [];
+      for (const x of xs){
+        const c = cols.find(c => Math.abs(c.x - x) < tol);
+        if (c){ c.n++; c.x = (c.x*(c.n-1) + x)/c.n; } else cols.push({ x, n:1 });
+      }
+      const strong = cols.filter(c => c.n >= rows.length * 0.6).sort((a,b) => a.x-b.x);
+      if (strong.length >= 2){
+        spans.push({ from:i, to:j, cols: strong.map(c => c.x) });
+        i = j + 1;
+        continue;
+      }
+    }
+    i = j + 1;
+  }
+  return spans;
+}
+
+function rowsFromSpan(lines, span){
+  return lines.slice(span.from, span.to + 1).map(l => {
+    const cells = Array(span.cols.length).fill('');
+    for (const it of l.items){
+      let best = 0, bd = Infinity;
+      span.cols.forEach((cx, ci) => { const d = Math.abs(cx - it.x); if (d < bd){ bd = d; best = ci; } });
+      cells[best] = (cells[best] ? cells[best] + ' ' : '') + it.str;
+    }
+    return cells.map(c => c.trim());
+  });
+}
+
+/** A paragraph accumulates lines while keeping each run's own formatting. */
+function makePara(line, isHeading, modal){
+  const runs = [];
+  const add = l => {
+    if (runs.length) runs.push({ text:' ', size:l.size });
+    for (const it of l.items){
+      const last = runs[runs.length-1];
+      if (last && !!last.bold === !!it.bold && !!last.italic === !!it.italic &&
+          Math.abs((last.size||0) - it.size) < 0.6){
+        last.text += it.str;
+      } else {
+        runs.push({ text:it.str, bold:it.bold, italic:it.italic, size:Math.round(it.size*10)/10 });
+      }
+    }
+  };
+  const o = {
+    x0: line.x0, lastY: line.y, isHeading, size: Math.round(line.size*10)/10,
+    push(l){ add(l); o.lastY = l.y; },
+    build(){
+      return {
+        type:'p', spaceAfter:6,
+        style: isHeading ? (o.size >= modal*1.6 ? 'Heading1' : 'Heading2') : undefined,
+        runs: runs.map(r => ({ text:r.text, bold:r.bold, italic:r.italic,
+                               size: isHeading ? undefined : r.size }))
+      };
+    }
+  };
+  add(line);
+  return o;
+}
+
+/** @returns {{blocks:Array, stats:object, pageCount:number}} */
+async function pdfToBlocks(bytes, onProgress, opt){
+  opt = opt || {};
   const pdfjs = await need.pdfjs();
   const doc = await pdfjs.getDocument({ data: bytes }).promise;
-  const out = [];
+  const stats = { pages: doc.numPages, textItems:0, images:0, tables:0, scannedPages:0 };
+  const perPage = [];
   const sizes = [];
 
   for (let p = 1; p <= doc.numPages; p++){
     const page = await doc.getPage(p);
+    const vp = page.getViewport({ scale:1 });
     const tc = await page.getTextContent();
     const items = tc.items.filter(i => i.str && i.str.trim());
+    stats.textItems += items.length;
 
-    // group items into lines by baseline y
+    const images = opt.images === false ? [] : await extractImages(page, pdfjs);
+    stats.images += images.length;
+
+    // pictures but no text means a scan — there is nothing to make editable
+    if (!items.length && images.length) stats.scannedPages++;
+
     const lines = [];
     for (const it of items){
       const t = it.transform;
       const size = Math.hypot(t[2], t[3]) || Math.abs(t[3]) || 11;
       const y = t[5], x = t[4];
       sizes.push(Math.round(size));
-      const fn = (it.fontName || '') + '';
+      const fn = String(it.fontName || '');
+      // pdf.js reports the real advance width — far better than guessing from length
+      const w = it.width != null ? it.width : it.str.length * size * 0.5;
+      const piece = { x, w, str:it.str, size,
+                      bold:/bold|black|heavy|semib/i.test(fn), italic:/italic|oblique/i.test(fn) };
       const hit = lines.find(l => Math.abs(l.y - y) < Math.max(2, size * 0.45));
-      const piece = { x, str: it.str, size, bold:/bold|black|heavy/i.test(fn), italic:/italic|oblique/i.test(fn) };
       if (hit){ hit.items.push(piece); hit.size = Math.max(hit.size, size); }
       else lines.push({ y, size, items:[piece] });
     }
     lines.sort((a,b) => b.y - a.y);
     for (const l of lines){
       l.items.sort((a,b) => a.x - b.x);
-      // re-insert spaces the PDF encoded as positioning rather than characters
-      let s = '';
-      let prev = null;
-      for (const it of l.items){
-        if (prev && it.x - prev.x > prev.size * 0.28 && !/\s$/.test(s) && !/^\s/.test(it.str)) s += ' ';
-        s += it.str;
-        prev = { x: it.x + (it.str.length * it.size * 0.5), size: it.size };
-      }
-      l.text = s.replace(/\s+/g,' ').trim();
-      l.x0 = l.items[0].x;
-      l.bold = l.items.every(i => i.bold);
-      l.italic = l.items.every(i => i.italic);
+      l.x0 = l.items.length ? l.items[0].x : 0;
+      l.text = l.items.map((it, i) => {
+        const prev = l.items[i-1];
+        const gap = prev ? it.x - (prev.x + prev.w) : 0;
+        return (prev && gap > it.size * 0.22 && !/\s$/.test(prev.str) && !/^\s/.test(it.str)
+                ? ' ' : '') + it.str;
+      }).join('').replace(/\s+/g,' ').trim();
     }
-
-    out.push({ page:p, lines: lines.filter(l => l.text) });
+    perPage.push({ lines: lines.filter(l => l.text), images, height: vp.height });
     if (onProgress) onProgress(p / doc.numPages);
+    await idle();
   }
 
-  // the most common glyph size is the body text size; anything much bigger is a heading
   const modal = sizes.length
     ? +Object.entries(sizes.reduce((m,s) => (m[s] = (m[s]||0)+1, m), {}))
         .sort((a,b) => b[1]-a[1])[0][0]
     : 11;
 
-  // merge lines into paragraphs
   const blocks = [];
-  out.forEach((pg, pi) => {
+  perPage.forEach((pg, pi) => {
     if (pi > 0) blocks.push({ type:'pagebreak' });
-    let cur = null;
-    let prev = null;
-    for (const l of pg.lines){
-      const gap = prev ? (prev.y - l.y) : 0;
-      const isHeading = l.size >= modal * 1.22;
-      const sameFlow = cur && !isHeading && !cur.isHeading &&
-                       gap > 0 && gap < l.size * 1.9 &&
-                       Math.abs(l.x0 - cur.x0) < l.size * 1.6;
-      if (sameFlow){
-        cur.text += ' ' + l.text;
-      } else {
-        if (cur) blocks.push(cur.block());
-        const size = Math.round(l.size * 10) / 10;
-        cur = {
-          text: l.text, x0: l.x0, isHeading, size,
-          block(){
-            const b = { text:this.text, size:this.size, bold:l.bold || this.isHeading, italic:l.italic, spaceAfter:6 };
-            if (this.isHeading) b.style = this.size >= modal*1.6 ? 'Heading1' : 'Heading2';
-            return b;
-          }
-        };
+
+    const spans = opt.tables === false ? [] : detectTables(pg.lines);
+    stats.tables += spans.length;
+
+    // interleave text and images by vertical position
+    const flow = [];
+    pg.lines.forEach((l, idx) => flow.push({ y:l.y, kind:'line', l, idx }));
+    pg.images.forEach(im => flow.push({ y:im.top, kind:'image', im }));
+    flow.sort((a,b) => b.y - a.y);
+
+    let para = null;
+    const flushPara = () => { if (para){ blocks.push(para.build()); para = null; } };
+    const emitted = new Set();
+
+    for (const node of flow){
+      if (node.kind === 'image'){
+        flushPara();
+        blocks.push({ type:'image', bytes:node.im.bytes, ext:node.im.ext,
+                      widthPt:node.im.widthPt, heightPt:node.im.heightPt });
+        continue;
       }
-      prev = l;
+      const span = spans.find(s => node.idx >= s.from && node.idx <= s.to);
+      if (span){
+        flushPara();
+        if (!emitted.has(span)){
+          emitted.add(span);
+          blocks.push({ type:'table', rows: rowsFromSpan(pg.lines, span), headerRow:true });
+        }
+        continue;
+      }
+      const l = node.l;
+      const isHeading = l.size >= modal * 1.22;
+      const gap = para ? para.lastY - l.y : 0;
+      const sameFlow = para && !isHeading && !para.isHeading &&
+                       gap > 0 && gap < l.size * 1.9 &&
+                       Math.abs(l.x0 - para.x0) < l.size * 1.6;
+      if (sameFlow){ para.push(l); continue; }
+      flushPara();
+      para = makePara(l, isHeading, modal);
     }
-    if (cur) blocks.push(cur.block());
+    flushPara();
   });
 
-  return { blocks, pageCount: out.length, doc };
+  return { blocks, stats, pageCount: perPage.length };
+}
+
+/** Quick look inside a PDF so the UI can say what it found before converting. */
+async function analyzePdf(bytes){
+  const pdfjs = await need.pdfjs();
+  const doc = await pdfjs.getDocument({ data: bytes }).promise;
+  const s = { pages: doc.numPages, textItems:0, images:0, scannedPages:0 };
+  const limit = Math.min(doc.numPages, 8);          // sampling is enough to classify
+  for (let p = 1; p <= limit; p++){
+    const page = await doc.getPage(p);
+    const items = (await page.getTextContent()).items.filter(i => i.str && i.str.trim());
+    const imgs = await extractImages(page, pdfjs);
+    s.textItems += items.length;
+    s.images += imgs.length;
+    if (!items.length) s.scannedPages++;
+  }
+  s.sampled = limit;
+  s.scanned = s.textItems === 0;                    // no text anywhere we looked
+  return s;
 }
 
 /** Render PDF pages to images. */
@@ -313,6 +549,7 @@ async function pdfToImages(bytes, opt, onProgress){
   return pages;
 }
 
-window.DocsLib = { need, blocksToPdf, htmlToBlocks, pdfToBlocks, pdfToImages,
-                   fileList, toWinAnsi, isPdf, isImg, isDocx, isTxt, extOf };
+window.DocsLib = { need, blocksToPdf, htmlToBlocks, pdfToBlocks, pdfToImages, analyzePdf,
+                   extractImages, detectTables, fileList, toWinAnsi,
+                   isPdf, isImg, isDocx, isTxt, extOf };
 })();
