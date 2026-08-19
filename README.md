@@ -94,10 +94,19 @@ That means zero quality loss and near-instant completion regardless of video len
   bold/italic/size, embedded pictures are pulled out as real Word images, and column-aligned
   rows are rebuilt as real `<w:tbl>` tables. Everything is a genuine Word object you can
   click and edit.
-  What it cannot recover: vector drawings and text boxes, which a PDF stores as drawing
-  commands rather than objects. And a **scanned PDF has no text inside it at all** — the
-  words are pixels. The tool inspects the file first and says so rather than silently
-  producing an empty document; that case needs OCR, which this app does not do.
+  Position is preserved as far as Word allows. The output page is set to the PDF's real page
+  size, pictures are emitted as *anchored* drawings pinned to their exact page coordinates
+  (`<wp:anchor>` with `relativeFrom="page"`, not the inline drawings Word reflows), each
+  paragraph keeps the left indent and the vertical gap measured in the PDF, and two-column
+  pages are read down one column at a time rather than line-by-line across both. A "reflow"
+  option is there if you would rather have an ordinary flowing document.
+
+  This is a close match, not a pixel copy: Word is a flow layout engine, so text still
+  reflows once you retype it. What cannot be recovered at all: vector drawings and text
+  boxes, which a PDF stores as drawing commands rather than objects. And a **scanned PDF has
+  no text inside it** — the words are pixels. The tool inspects the file first and says so
+  rather than silently producing an empty document; that case needs OCR, which this app does
+  not do.
 - **Exact look** renders each page to an image and places it full-bleed in the document. It
   looks identical to the PDF, but the text cannot be edited or selected.
 

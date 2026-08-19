@@ -363,6 +363,33 @@ function rowsFromSpan(lines, span){
   });
 }
 
+/** Two-column pages read down the left column first, not line by line across
+ *  both. Only reorders when the evidence is strong, since a false positive
+ *  would scramble an ordinary page. */
+function orderLines(lines, pageW){
+  if (lines.length < 6) return lines;
+  const mid = pageW / 2;
+  const left  = lines.filter(l => l.x0 <  mid);
+  const right = lines.filter(l => l.x0 >= mid);
+  if (left.length < 3 || right.length < 3) return lines;
+
+  // in a real two-column layout the left column stops before the centre;
+  // in ordinary prose the lines run the full width
+  const stopsShort = left.filter(l => {
+    const last = l.items[l.items.length - 1];
+    return (last.x + last.w) < mid * 1.08;
+  }).length;
+  if (stopsShort < left.length * 0.75) return lines;
+
+  // and the two groups must occupy the same vertical band
+  const span = a => [Math.min(...a.map(l => l.y)), Math.max(...a.map(l => l.y))];
+  const [l0,l1] = span(left), [r0,r1] = span(right);
+  const overlap = Math.min(l1,r1) - Math.max(l0,r0);
+  if (overlap < (l1 - l0) * 0.4) return lines;
+
+  return left.concat(right);      // both halves keep their top-to-bottom order
+}
+
 /** A paragraph accumulates lines while keeping each run's own formatting. */
 function makePara(line, isHeading, modal){
   const runs = [];
@@ -379,11 +406,15 @@ function makePara(line, isHeading, modal){
     }
   };
   const o = {
-    x0: line.x0, lastY: line.y, isHeading, size: Math.round(line.size*10)/10,
+    x0: line.x0, topY: line.y, lastY: line.y, isHeading, size: Math.round(line.size*10)/10,
     push(l){ add(l); o.lastY = l.y; },
     build(){
       return {
-        type:'p', spaceAfter:6,
+        type:'p', spaceAfter:0,
+        // keep the paragraph's real horizontal position and the real vertical
+        // gap that preceded it, so the page reads like the original
+        indent: Math.max(0, Math.round(o.x0)),
+        spaceBefore: Math.max(0, Math.round(o.gapBefore || 0)),
         style: isHeading ? (o.size >= modal*1.6 ? 'Heading1' : 'Heading2') : undefined,
         runs: runs.map(r => ({ text:r.text, bold:r.bold, italic:r.italic,
                                size: isHeading ? undefined : r.size }))
@@ -442,7 +473,8 @@ async function pdfToBlocks(bytes, onProgress, opt){
                 ? ' ' : '') + it.str;
       }).join('').replace(/\s+/g,' ').trim();
     }
-    perPage.push({ lines: lines.filter(l => l.text), images, height: vp.height });
+    const kept = orderLines(lines.filter(l => l.text), vp.width);
+    perPage.push({ lines: kept, images, width: vp.width, height: vp.height });
     if (onProgress) onProgress(p / doc.numPages);
     await idle();
   }
@@ -466,14 +498,26 @@ async function pdfToBlocks(bytes, onProgress, opt){
     flow.sort((a,b) => b.y - a.y);
 
     let para = null;
-    const flushPara = () => { if (para){ blocks.push(para.build()); para = null; } };
+    let prevBottomY = null;                 // null = nothing emitted on this page yet
+    const flushPara = () => {
+      if (!para) return;
+      blocks.push(para.build());
+      prevBottomY = para.lastY;
+      para = null;
+    };
     const emitted = new Set();
 
     for (const node of flow){
       if (node.kind === 'image'){
         flushPara();
-        blocks.push({ type:'image', bytes:node.im.bytes, ext:node.im.ext,
-                      widthPt:node.im.widthPt, heightPt:node.im.heightPt });
+        blocks.push({
+          type:'image', bytes:node.im.bytes, ext:node.im.ext,
+          widthPt:node.im.widthPt, heightPt:node.im.heightPt,
+          // PDF measures y up from the bottom-left; Word measures down from the
+          // top-left, so the anchor offset has to be flipped
+          anchor: opt.anchorImages === false ? null
+                : { xPt: Math.max(0, node.im.x), yPt: Math.max(0, pg.height - node.im.top) }
+        });
         continue;
       }
       const span = spans.find(s => node.idx >= s.from && node.idx <= s.to);
@@ -494,11 +538,17 @@ async function pdfToBlocks(bytes, onProgress, opt){
       if (sameFlow){ para.push(l); continue; }
       flushPara();
       para = makePara(l, isHeading, modal);
+      // reproduce the whitespace that actually preceded this paragraph: Word
+      // supplies roughly one line height itself, so only the excess is added
+      const from = prevBottomY == null ? pg.height : prevBottomY;
+      para.gapBefore = Math.max(0, (from - l.y) - l.size * 1.25);
     }
     flushPara();
   });
 
-  return { blocks, stats, pageCount: perPage.length };
+  const first = perPage[0] || { width:595.28, height:841.89 };
+  return { blocks, stats, pageCount: perPage.length,
+           pageSize: { widthPt: first.width, heightPt: first.height } };
 }
 
 /** Quick look inside a PDF so the UI can say what it found before converting. */

@@ -282,7 +282,15 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
     const row = (OPTIONS[k] || []).find(o => o[0] === v);
     p.q('fmthint').textContent = row ? row[2] : '';
     p.q('dpi').disabled = !(v === 'images' || v === 'docx-image');
+    const editable = v === 'docx-text';
+    p.q('layout').disabled = !editable;
+    p.q('images').disabled = !editable;
+    p.q('tables').disabled = !editable;
+    p.q('layouthint').textContent = p.q('layout').value === 'exact'
+      ? 'Pictures pinned to their original spot on the page'
+      : 'Ignore PDF coordinates and let Word flow the content';
   };
+  p.q('layout').onchange = () => p.q('format').onchange();
 
   p.q('another').onclick = () => { p.q('body').classList.add('hide'); p.q('pick').classList.remove('hide'); };
   p.q('again').onclick = () => p.step('body');
@@ -298,9 +306,11 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
 
       if (fmt === 'docx-text'){
         p.stat('Reading text, images and tables out of the PDF…');
-        const { blocks, stats } = await L.pdfToBlocks(bytes, v => p.prog(v*0.7), {
+        const keepLayout = p.q('layout').value === 'exact';
+        const { blocks, stats, pageSize } = await L.pdfToBlocks(bytes, v => p.prog(v*0.7), {
           tables: p.q('tables').value === '1',
           images: p.q('images').value === '1',
+          anchorImages: keepLayout,
         });
 
         if (!stats.textItems && !stats.images)
@@ -318,10 +328,25 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
         await idle();
         // pdfToBlocks already emits paragraphs-with-runs, tables and images;
         // only the image field name differs from what the docx builder wants
-        const dblocks = blocks.map(b => b.type === 'image'
-          ? { type:'image', data:b.bytes, ext:'png', widthPt:b.widthPt, heightPt:b.heightPt }
-          : b);
-        outBlob = await Docx.build({ blocks: dblocks });
+        const dblocks = blocks.map(b => {
+          if (b.type === 'image')
+            return { type:'image', data:b.bytes, ext:'png',
+                     widthPt:b.widthPt, heightPt:b.heightPt,
+                     anchor: keepLayout ? b.anchor : null };
+          if (b.type === 'p' && !keepLayout)
+            // reflow mode: drop the measured geometry and let Word lay it out
+            return Object.assign({}, b, { indent:0, spaceBefore:0, spaceAfter:6 });
+          return b;
+        });
+
+        // Matching the PDF's page size matters more than anything else here:
+        // pouring Letter-sized content onto a default A4 page reflows everything.
+        outBlob = await Docx.build({
+          blocks: dblocks,
+          page: { w: Math.round(pageSize.widthPt  * 20),
+                  h: Math.round(pageSize.heightPt * 20) },
+          margin: keepLayout ? 0 : 1440,
+        });
         outName = base + '.docx';
 
         const paras = dblocks.filter(b => b.type === 'p').length;
@@ -330,9 +355,15 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
           ', <b>' + stats.images + '</b> image' + (stats.images===1?'':'s') +
           ' and <b>' + stats.tables + '</b> table' + (stats.tables===1?'':'s') +
           ' across ' + stats.pages + ' page' + (stats.pages===1?'':'s') + '.<br>' +
-          '<span style="opacity:.8">Every paragraph, picture and table is a real Word object you can ' +
-          'click and edit. Bold, italic and font sizes are preserved per run. Vector drawings and ' +
-          'text boxes are not recoverable — a PDF stores them as drawing commands, not objects.</span>');
+          '<span style="opacity:.8">Page size <b>' + Math.round(pageSize.widthPt) + '×' +
+          Math.round(pageSize.heightPt) + 'pt</b> copied from the PDF. ' +
+          (keepLayout
+            ? 'Pictures are anchored at their original coordinates and paragraphs keep their real ' +
+              'indents and spacing, so the page reads like the original. Text still reflows if you ' +
+              'retype it — Word is a flow layout, so this is a close match, not a pixel copy.'
+            : 'Reflowed as an ordinary document, so positions differ from the PDF by design.') +
+          ' Vector drawings and text boxes are not recoverable — a PDF stores them as drawing ' +
+          'commands, not objects.</span>');
 
       } else if (fmt === 'docx-image'){
         p.stat('Rendering the pages…');

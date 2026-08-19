@@ -59,15 +59,29 @@ async function build(o){
   const body = [];
   let docPrId = 1;
 
+  // Anchored pictures must live inside a paragraph on the page they belong to.
+  // They are held here and folded into the next real paragraph, rather than
+  // getting a paragraph of their own -- an extra empty one would push the text
+  // down and undo the positioning we are trying to preserve.
+  let anchored = [];
+  const flushAnchors = () => {
+    if (!anchored.length) return;
+    body.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="1" w:lineRule="exact"/>' +
+              '</w:pPr>' + anchored.join('') + '</w:p>');
+    anchored = [];
+  };
+
   for (const b of blocks){
     if (!b) continue;
 
     if (b.type === 'pagebreak'){
+      flushAnchors();                       // anchors belong to the page we are leaving
       body.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
       continue;
     }
 
     if (b.type === 'table' && b.rows && b.rows.length){
+      flushAnchors();
       const cols = Math.max(...b.rows.map(r => r.length));
       const colW = Math.floor((page.w - margin*2) / cols);
       const border = ['top','left','bottom','right','insideH','insideV']
@@ -96,11 +110,8 @@ async function build(o){
       const cx = Math.round((b.widthPt  || 400) * EMU_PER_PT);
       const cy = Math.round((b.heightPt || 300) * EMU_PER_PT);
       const id = docPrId++;
-      body.push(
-        '<w:p>' + (b.align ? '<w:pPr><w:jc w:val="' + b.align + '"/></w:pPr>' : '') +
-        '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
-        '<wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
-        '<wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+
+      const graphic =
         '<wp:docPr id="' + id + '" name="Picture ' + id + '"/>' +
         '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
         '<a:graphic><a:graphicData uri="' + NS.pic + '"><pic:pic>' +
@@ -108,7 +119,32 @@ async function build(o){
         '<pic:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
         '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
         '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
-        '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>');
+        '</pic:pic></a:graphicData></a:graphic>';
+
+      if (b.anchor){
+        // Pinned to an exact spot on the page, which is the only way to keep a
+        // PDF's absolute layout: Word flows inline images, anchored ones stay put.
+        anchored.push(
+          '<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" ' +
+          'relativeHeight="' + (1000 + id) + '" behindDoc="' + (b.behind ? '1' : '0') +
+          '" locked="0" layoutInCell="1" allowOverlap="1">' +
+          '<wp:simplePos x="0" y="0"/>' +
+          '<wp:positionH relativeFrom="page"><wp:posOffset>' +
+            Math.max(0, Math.round(b.anchor.xPt * EMU_PER_PT)) + '</wp:posOffset></wp:positionH>' +
+          '<wp:positionV relativeFrom="page"><wp:posOffset>' +
+            Math.max(0, Math.round(b.anchor.yPt * EMU_PER_PT)) + '</wp:posOffset></wp:positionV>' +
+          '<wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+          '<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>' +
+          graphic + '</wp:anchor></w:drawing></w:r>');
+        continue;
+      }
+
+      body.push(
+        '<w:p>' + (b.align ? '<w:pPr><w:jc w:val="' + b.align + '"/></w:pPr>' : '') +
+        '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+        '<wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+        '<wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+        graphic + '</wp:inline></w:drawing></w:r></w:p>');
       continue;
     }
 
@@ -135,8 +171,12 @@ async function build(o){
              '<w:t xml:space="preserve">' + esc(text) + '</w:t></w:r>';
     }).join('');
 
-    body.push('<w:p>' + (pPr.length ? '<w:pPr>' + pPr.join('') + '</w:pPr>' : '') + runs + '</w:p>');
+    const anchorRuns = anchored.join('');
+    anchored = [];
+    body.push('<w:p>' + (pPr.length ? '<w:pPr>' + pPr.join('') + '</w:pPr>' : '') +
+              anchorRuns + runs + '</w:p>');
   }
+  flushAnchors();
 
   const sectPr =
     '<w:sectPr><w:pgSz w:w="' + page.w + '" w:h="' + page.h + '"/>' +
