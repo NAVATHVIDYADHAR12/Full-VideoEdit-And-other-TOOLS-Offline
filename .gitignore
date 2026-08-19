@@ -1,0 +1,14 @@
+# ffmpeg.wasm engine — ~62 MB of compiled binaries.
+# Not tracked in git; run "node fetch-vendor.js" to download them,
+# or just use the app (it falls back to the CDN automatically).
+vendor/
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+node_modules/
+*.log

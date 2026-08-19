@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# batch files must keep CRLF or cmd.exe can mis-parse them
+*.bat text eol=crlf
+*.wasm binary

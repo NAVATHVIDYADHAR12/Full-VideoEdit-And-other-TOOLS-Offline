@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Toolkit</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ home ============ -->
+  <div id="home">
+    <h1>Video <span>Toolkit</span></h1>
+    <p class="sub">Six tools, one page. Everything runs on your own machine — no uploads, no accounts, no watermarks added.</p>
+    <div class="tools">
+      <button class="tool" data-go="frames">
+        <span class="ic">🖼️</span><b>Video → JPG frames</b>
+        <small>Pull every frame out as a numbered JPEG and download the lot as a ZIP. 30 fps by default.</small>
+        <span class="tag fast">instant · offline</span>
+      </button>
+      <button class="tool" data-go="wmvideo">
+        <span class="ic">🚫</span><b>Remove watermark from video</b>
+        <small>Box the logo or timestamp and get a clean video back out — inpaint, blur, pixelate or crop.</small>
+        <span class="tag ff">uses ffmpeg</span>
+      </button>
+      <button class="tool" data-go="extract">
+        <span class="ic">🎵</span><b>Extract audio from video</b>
+        <small>Save the soundtrack as WAV, MP3 or M4A — or copy the original stream untouched.</small>
+        <span class="tag fast">WAV is instant</span>
+      </button>
+      <button class="tool" data-go="mute">
+        <span class="ic">🔇</span><b>Mute a video</b>
+        <small>Strip the audio track out. Lossless and near-instant — the video is copied, never re-encoded.</small>
+        <span class="tag ff">uses ffmpeg</span>
+      </button>
+      <button class="tool" data-go="merge">
+        <span class="ic">🎬</span><b>Merge audio into video</b>
+        <small>Put a new soundtrack on a video — replace the original or mix the two together.</small>
+        <span class="tag ff">uses ffmpeg</span>
+      </button>
+      <button class="tool" data-go="denoise">
+        <span class="ic">🎧</span><b>Noise cancellation</b>
+        <small>Strip hiss, hum and background roar out of an audio file or a video's soundtrack.</small>
+        <span class="tag fast">instant · offline</span>
+      </button>
+    </div>
+    <div class="note info" style="margin-top:22px" id="envNote"></div>
+  </div>
+
+  <!-- ============ 1. frames ============ -->
+  <div id="panel-frames" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Video → JPG frames</h2><p class="sub" style="margin:0">Every frame as a numbered JPEG, zipped.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div data-el="body" class="card hide">
+      <video data-el="video" muted playsinline preload="auto" style="max-height:250px;margin-bottom:14px"></video>
+      <div class="meta" data-el="info"></div>
+      <hr>
+      <div class="grid">
+        <div><label>Frames per second</label>
+          <input type="number" data-el="fps" value="30" min="0.1" max="120" step="1">
+          <div class="hint">30 = one JPG every 33 ms</div></div>
+        <div><label>JPEG quality — <b data-el="qval">85</b>%</label>
+          <input type="range" data-el="quality" value="85" min="30" max="100" step="1">
+          <div class="hint">Lower = smaller ZIP</div></div>
+        <div><label>Max width (px)</label>
+          <input type="number" data-el="maxw" value="0" min="0" step="10">
+          <div class="hint">0 = keep original size</div></div>
+        <div><label>Start time (s)</label><input type="number" data-el="start" value="0" min="0" step="0.1"></div>
+        <div><label>End time (s)</label><input type="number" data-el="end" value="0" min="0" step="0.1">
+          <div class="hint">0 = to the end</div></div>
+      </div>
+
+      <div class="section">
+        <div class="head">
+          <div class="title">Remove a watermark<small>Erase a logo or timestamp from every JPG</small></div>
+          <label class="toggle"><input type="checkbox" data-el="wmOn"> Enable</label>
+        </div>
+        <div data-el="wmBody" class="hide"></div>
+      </div>
+
+      <div class="note" data-el="estimate" style="margin-top:16px"></div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Extract frames →</button>
+        <button class="ghost" data-el="another">Choose another video</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Starting…</span><span data-el="eta"></span></div>
+      <canvas data-el="prev" class="prev" style="max-height:200px;margin-top:14px"></canvas>
+      <div class="row" style="margin-top:14px"><button class="ghost" data-el="cancel">Cancel</button></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download ZIP</button>
+        <button class="ghost" data-el="again">Do another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 2. watermark → video ============ -->
+  <div id="panel-wmvideo" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Remove watermark from video</h2><p class="sub" style="margin:0">Clean video out, audio kept as-is.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div data-el="body" class="card hide">
+      <video data-el="video" muted playsinline preload="auto" class="hide"></video>
+      <div class="meta" data-el="info"></div>
+      <div data-el="wmBody" style="margin-top:8px"></div>
+      <hr>
+      <div class="grid">
+        <div><label>Output quality — <b data-el="crfval">20</b></label>
+          <input type="range" data-el="crf" min="14" max="32" value="20" step="1">
+          <div class="hint">Lower number = better quality, bigger file</div></div>
+        <div><label>Speed / compression</label>
+          <select data-el="preset">
+            <option value="veryfast">Very fast</option>
+            <option value="faster" selected>Faster</option>
+            <option value="medium">Medium (smaller file)</option>
+          </select>
+          <div class="hint">ffmpeg x264 preset</div></div>
+        <div><label>Audio</label>
+          <select data-el="audio">
+            <option value="copy" selected>Keep original audio</option>
+            <option value="none">Drop the audio</option>
+          </select></div>
+      </div>
+      <div class="note" data-el="estimate" style="margin-top:16px"></div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Remove watermark →</button>
+        <button class="ghost" data-el="another">Choose another video</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Starting…</span><span data-el="eta"></span></div>
+      <div class="log hide" data-el="log"></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <video data-el="result" controls style="margin-top:14px;max-height:280px"></video>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download video</button>
+        <button class="ghost" data-el="again">Do another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 3. extract audio ============ -->
+  <div id="panel-extract" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Extract audio from video</h2><p class="sub" style="margin:0">Save the soundtrack as its own file.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div data-el="body" class="card hide">
+      <div class="meta" data-el="info"></div>
+      <canvas class="wave" data-el="wave" style="margin-top:14px"></canvas>
+      <audio data-el="player" controls style="margin-top:12px"></audio>
+      <hr>
+      <div class="grid">
+        <div><label>Save as</label>
+          <select data-el="format">
+            <option value="wav">WAV — lossless, instant, no download needed</option>
+            <option value="mp3">MP3 — small, plays everywhere</option>
+            <option value="m4a">M4A / AAC — small, high quality</option>
+            <option value="copy">Original stream — untouched, no re-encode</option>
+          </select>
+          <div class="hint" data-el="fmthint"></div></div>
+        <div><label>Bitrate</label>
+          <select data-el="bitrate">
+            <option value="320k">320 kbps — best</option>
+            <option value="192k" selected>192 kbps — great</option>
+            <option value="128k">128 kbps — small</option>
+          </select>
+          <div class="hint">MP3 / M4A only</div></div>
+        <div><label>Channels</label>
+          <select data-el="channels">
+            <option value="keep" selected>Keep original</option>
+            <option value="mono">Mix down to mono</option>
+          </select></div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Extract audio →</button>
+        <button class="ghost" data-el="another">Choose another file</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span><span data-el="eta"></span></div>
+      <div class="log hide" data-el="log"></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <audio data-el="result" controls style="margin-top:12px"></audio>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download audio</button>
+        <button class="ghost" data-el="again">Do another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 4. mute ============ -->
+  <div id="panel-mute" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Mute a video</h2><p class="sub" style="margin:0">Take the sound off. The picture is copied untouched.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div data-el="body" class="card hide">
+      <video data-el="video" controls playsinline preload="metadata" style="max-height:250px;margin-bottom:14px"></video>
+      <div class="meta" data-el="info"></div>
+      <hr>
+      <div class="grid">
+        <div><label>How</label>
+          <select data-el="mode">
+            <option value="remove" selected>Remove the audio track entirely</option>
+            <option value="silence">Keep a silent audio track</option>
+          </select>
+          <div class="hint" data-el="modehint"></div></div>
+        <div><label>Container</label>
+          <select data-el="container">
+            <option value="same" selected>Same as input</option>
+            <option value="mp4">MP4</option>
+            <option value="webm">WebM</option>
+          </select></div>
+      </div>
+      <div class="note ok" style="margin-top:16px">⚡ The video stream is stream-copied, not re-encoded — so this is
+        near-instant and there is <b>zero</b> quality loss, however long the video is.</div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Mute it →</button>
+        <button class="ghost" data-el="another">Choose another video</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span><span data-el="eta"></span></div>
+      <div class="log hide" data-el="log"></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <video data-el="result" controls style="margin-top:14px;max-height:280px"></video>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download video</button>
+        <button class="ghost" data-el="again">Do another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 5. merge ============ -->
+  <div id="panel-merge" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Merge audio into video</h2><p class="sub" style="margin:0">Give a video a new soundtrack.</p></div></div>
+
+    <div class="card">
+      <label>1 · The video</label>
+      <div data-el="pickV"></div>
+      <div class="meta" data-el="infoV"></div>
+    </div>
+
+    <div class="card">
+      <label>2 · The audio to add</label>
+      <div data-el="pickA"></div>
+      <div class="meta" data-el="infoA"></div>
+    </div>
+
+    <div data-el="body" class="card hide">
+      <div class="grid">
+        <div><label>What to do with the original audio</label>
+          <select data-el="mode">
+            <option value="replace" selected>Replace it with the new audio</option>
+            <option value="mix">Mix both together</option>
+          </select>
+          <div class="hint" data-el="modehint"></div></div>
+        <div><label>New audio volume — <b data-el="v1val">100</b>%</label>
+          <input type="range" data-el="vol1" min="0" max="200" value="100" step="5"></div>
+        <div><label>Original audio volume — <b data-el="v2val">100</b>%</label>
+          <input type="range" data-el="vol2" min="0" max="200" value="100" step="5">
+          <div class="hint">Mix mode only</div></div>
+        <div><label>Length</label>
+          <select data-el="len">
+            <option value="video" selected>Match the video</option>
+            <option value="shortest">Stop at whichever ends first</option>
+          </select></div>
+      </div>
+      <div class="note ok" style="margin-top:16px">⚡ The video stream is copied, not re-encoded — only the audio is
+        written, so quality is untouched and it finishes quickly.</div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Merge →</button>
+        <button class="ghost" data-el="another">Start over</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span><span data-el="eta"></span></div>
+      <div class="log hide" data-el="log"></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <video data-el="result" controls style="margin-top:14px;max-height:280px"></video>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download video</button>
+        <button class="ghost" data-el="again">Do another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 6. noise cancellation ============ -->
+  <div id="panel-denoise" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Noise cancellation</h2><p class="sub" style="margin:0">Take the hiss, hum and background roar out.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div data-el="body" class="card hide">
+      <div class="meta" data-el="info"></div>
+
+      <label style="margin-top:16px">Waveform — drag to mark a <b>noise-only</b> stretch (optional)</label>
+      <canvas class="wave" data-el="wave"></canvas>
+      <div class="status" style="margin-top:8px">
+        <span data-el="selinfo">No selection — the noise profile will be learned automatically.</span>
+        <button class="ghost sm" data-el="clearsel">Clear selection</button>
+      </div>
+
+      <hr>
+      <div class="grid">
+        <div><label>Strength — <b data-el="amtval">70</b>%</label>
+          <input type="range" data-el="amount" min="10" max="100" value="70" step="5">
+          <div class="hint">Too high can make speech sound watery</div></div>
+        <div><label>High-pass filter</label>
+          <select data-el="hp">
+            <option value="0">Off</option>
+            <option value="80" selected>80 Hz — remove rumble</option>
+            <option value="150">150 Hz — remove hum &amp; thump</option>
+          </select>
+          <div class="hint">Cuts low-frequency noise before denoising</div></div>
+        <div><label>After processing</label>
+          <select data-el="norm">
+            <option value="0">Leave levels alone</option>
+            <option value="1" selected>Normalise volume</option>
+          </select></div>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Clean it up →</button>
+        <button class="ghost" data-el="another">Choose another file</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span><span data-el="eta"></span></div>
+      <div class="log hide" data-el="log"></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <div class="grid" style="margin-top:14px">
+        <div><label>Before</label><audio data-el="before" controls></audio></div>
+        <div><label>After</label><audio data-el="after" controls></audio></div>
+      </div>
+      <canvas class="wave" data-el="waveAfter" style="margin-top:14px"></canvas>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download</button>
+        <button class="ghost" data-el="again">Do another</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/dsp.js"></script>
+<script src="js/wm.js"></script>
+<script src="js/tools.js"></script>
+</body>
+</html>
