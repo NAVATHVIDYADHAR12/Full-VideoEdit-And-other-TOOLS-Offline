@@ -1,0 +1,7 @@
+# local-development only — not needed by the hosted app
+server.js
+start.bat
+fetch-vendor.js
+
+# the ffmpeg engine is loaded from the CDN when hosted
+vendor/

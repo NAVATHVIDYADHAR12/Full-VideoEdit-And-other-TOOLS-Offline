@@ -70,6 +70,23 @@ function hooks(p, label){
 
 const extOf = n => (String(n).match(/\.([^.]+)$/) || [,'mp4'])[1].toLowerCase();
 
+/* ================= where are we running? ================= */
+const ENV = (function(){
+  const isFile = location.protocol === 'file:';
+  const isLocal = /^(localhost|127\.|0\.0\.0\.0|\[::1\]|::1)/.test(location.hostname);
+  return { isFile, isLocal, hosted: !isFile && !isLocal, mt: FF.threaded() };
+})();
+
+/* Advice that actually applies where the app is running — telling a visitor on a
+   hosted site to "run start.bat" would be nonsense. */
+function speedTip(){
+  if (ENV.mt) return '';
+  if (ENV.isFile)  return ' Open it through <code>start.bat</code> instead to go several times faster.';
+  if (ENV.isLocal) return ' Restart via <code>start.bat</code> so the COOP/COEP headers are sent.';
+  return ' This deployment is not cross-origin isolated, so ffmpeg is single-threaded.';
+}
+
+
 /* Run ffmpeg, retrying with a fallback argument set if the first attempt fails.
  * Returns {data, out} — `out` matters because a fallback may write a different
  * filename (and therefore a different extension) than the first attempt. */
@@ -277,7 +294,7 @@ async function ffRun(p, args, inputs, out, label, fallback){
     est.className = 'note ok';
     est.innerHTML = 'Method <b>' + wm.mode + '</b> on <b>' + wm.boxes.length + '</b> box' +
       (wm.boxes.length > 1 ? 'es' : '') + ' · re-encodes the video, roughly <b>' + fmtTime(secs) +
-      '</b>' + (FF.threaded() ? ' (multithreaded)' : ' (single-threaded — run start.bat to speed this up)') + '.' +
+      '</b>' + (ENV.mt ? ' (multithreaded)' : ' (single-threaded).' + speedTip()) + '.' +
       (wm.mode === 'crop' ? '' : '<br>The audio is ' + (p.q('audio').value === 'copy' ? 'kept exactly as it is.' : 'dropped.'));
   }
 
@@ -826,13 +843,21 @@ async function ffRun(p, args, inputs, out, label, fallback){
 /* ================= environment note ================= */
 (function env(){
   const n = document.getElementById('envNote');
-  const served = location.protocol !== 'file:';
-  const mt = FF.threaded();
-  n.innerHTML = served
-    ? (mt ? '⚡ <b>Running at full speed.</b> ffmpeg will use multiple threads, and the engine is loaded from the local <code>vendor/</code> folder — no internet needed.'
-          : '📦 Served locally, but multithreading is off. Restart with <code>start.bat</code> to get the COOP/COEP headers that enable it.')
-    : '💡 <b>Tip:</b> you opened this file directly. The frame, audio and noise tools work fine, but the ffmpeg-based tools ' +
-      'will download the engine from the internet each session. Run <code>start.bat</code> instead to use the offline copy and go several times faster.';
+  if (ENV.hosted){
+    n.innerHTML = ENV.mt
+      ? '⚡ <b>Running at full speed.</b> This page is cross-origin isolated, so ffmpeg uses multiple threads. ' +
+        'Your files are processed in this browser and never uploaded.'
+      : '📦 Everything works, but ffmpeg is single-threaded here — video jobs will be slower. ' +
+        'Your files are still processed entirely in this browser and never uploaded.';
+  } else if (ENV.isLocal){
+    n.innerHTML = ENV.mt
+      ? '⚡ <b>Running at full speed.</b> ffmpeg will use multiple threads, and the engine loads from your local <code>vendor/</code> folder — no internet needed.'
+      : '📦 Served locally, but multithreading is off. Restart with <code>start.bat</code> to get the COOP/COEP headers that enable it.';
+  } else {
+    n.innerHTML = '💡 <b>Tip:</b> you opened this file directly. The frame, audio and noise tools work fine, but the ' +
+      'ffmpeg-based tools will fetch the engine from the internet each session. Run <code>start.bat</code> instead ' +
+      'to use the offline copy and go several times faster.';
+  }
 })();
 
 /* open straight into a tool if the URL has a hash */

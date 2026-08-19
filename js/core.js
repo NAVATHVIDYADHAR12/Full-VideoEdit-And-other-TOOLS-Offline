@@ -235,8 +235,10 @@ const FF = (function(){
       return ff;
     })().catch(e => {
       loading = null;
-      throw new Error('ffmpeg failed to load: ' + e.message +
-        (isFile ? '\n\nTip: run start.bat instead of opening the file directly — that serves it locally and uses the offline copy.' : ''));
+      const hint = isFile
+        ? '\n\nTip: run start.bat instead of opening the file directly — that serves it locally and uses the offline copy.'
+        : '\n\nCheck your internet connection: the ffmpeg engine is being fetched from a CDN.';
+      throw new Error('ffmpeg failed to load: ' + e.message + hint);
     });
 
     return loading;

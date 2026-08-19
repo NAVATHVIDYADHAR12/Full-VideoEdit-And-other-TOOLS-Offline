@@ -27,6 +27,27 @@ tools will download the engine from the internet each session and run single-thr
 Requires [Node.js](https://nodejs.org) for `start.bat` only. The app itself is plain
 browser JavaScript.
 
+## Deploying to Vercel
+
+The app is fully static, so it deploys as-is:
+
+1. Vercel → **Add New Project** → import this repo
+2. Framework preset: **Other**. Leave build command and output directory empty.
+3. Deploy.
+
+`vercel.json` sends `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`, which make the page cross-origin isolated.
+That is what unlocks `SharedArrayBuffer`, and therefore **multithreaded** ffmpeg. Without
+those headers everything still works, just single-threaded and slower.
+
+`vendor/` is excluded from the deployment via `.vercelignore`, so the hosted app loads the
+ffmpeg engine from a CDN. That combination is safe here because both unpkg and jsDelivr send
+`Cross-Origin-Resource-Policy: cross-origin`, which is exactly what `require-corp` demands —
+verified against the live CDNs for all six engine files.
+
+Note that even when hosted, **no video ever reaches the server**. Vercel only serves the HTML,
+CSS and JS; all decoding, processing and encoding happens in the visitor's own browser.
+
 ## The tools
 
 | Tool | What it does | Engine |
