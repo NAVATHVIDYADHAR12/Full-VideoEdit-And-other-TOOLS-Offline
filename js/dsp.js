@@ -70,8 +70,17 @@ function denoise(input, opt){
   const floor = opt.floor  == null ? 0.06 : opt.floor;
   const bins  = N / 2 + 1;
   const win   = hann(N);
-  const len   = input.length;
-  if (len < N) return input.slice();
+  const srcLen = input.length;
+  if (srcLen < N) return input.slice();
+
+  // Pad both ends by one window. Without this the first and last samples are
+  // covered by only part of a window, so the overlap-add normalisation divides
+  // by a near-zero weight and detonates into a burst of noise at the edges.
+  const PAD = N;
+  const len = srcLen + PAD * 2;
+  const padded = new Float32Array(len);
+  padded.set(input, PAD);
+  input = padded;
 
   const frames = Math.max(1, Math.ceil((len - N) / hop) + 1);
   const mag    = new Float32Array(frames * bins);
@@ -105,8 +114,9 @@ function denoise(input, opt){
   const noise = new Float32Array(bins);
   let learn = [];
   if (opt.noiseFrom){
-    const a = Math.max(0, Math.floor((opt.noiseFrom[0] - 0) / hop));
-    const b = Math.min(frames - 1, Math.ceil(opt.noiseFrom[1] / hop));
+    // caller's sample offsets are in the ORIGINAL signal; shift them past the pad
+    const a = Math.max(0, Math.floor((opt.noiseFrom[0] + PAD) / hop));
+    const b = Math.min(frames - 1, Math.ceil((opt.noiseFrom[1] + PAD) / hop));
     for (let f = a; f <= b; f++) learn.push(f);
   }
   if (learn.length < 3){
@@ -150,7 +160,7 @@ function denoise(input, opt){
 
   for (let i = 0; i < len; i++) if (norm[i] > 1e-8) out[i] /= norm[i];
   if (opt.onProgress) opt.onProgress(1);
-  return out;
+  return out.slice(PAD, PAD + srcLen);   // drop the padding again
 }
 
 /* ---------------- extras ---------------- */

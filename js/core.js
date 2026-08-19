@@ -48,12 +48,26 @@ function download(blob, filename){
  * Renders drag & drop + "Browse" + "Pick from a folder" into a container. */
 const VIDEO_RE = /\.(mp4|webm|mov|mkv|avi|m4v|mpg|mpeg|ogv|3gp|ts|flv)$/i;
 const AUDIO_RE = /\.(mp3|wav|m4a|aac|ogg|opus|flac|wma|aiff?)$/i;
+const DOC_RE   = /\.(pdf|docx?|pptx?|txt|rtf|odt|md)$/i;
+const IMG_RE   = /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i;
 
 function makePicker(container, opt){
   opt = opt || {};
   const kind = opt.kind || 'video';                  // 'video' | 'audio' | 'media'
-  const re   = kind === 'audio' ? AUDIO_RE : kind === 'media' ? new RegExp(VIDEO_RE.source + '|' + AUDIO_RE.source, 'i') : VIDEO_RE;
-  const accept = kind === 'audio' ? 'audio/*' : kind === 'media' ? 'video/*,audio/*' : 'video/*';
+  const re = opt.re || (
+      kind === 'audio' ? AUDIO_RE
+    : kind === 'media' ? new RegExp(VIDEO_RE.source + '|' + AUDIO_RE.source, 'i')
+    : kind === 'docs'  ? new RegExp(DOC_RE.source + '|' + IMG_RE.source, 'i')
+    : kind === 'word'  ? /\.docx$/i
+    : kind === 'pdf'   ? /\.pdf$/i
+    : VIDEO_RE);
+  const accept = opt.accept || (
+      kind === 'audio' ? 'audio/*'
+    : kind === 'media' ? 'video/*,audio/*'
+    : kind === 'docs'  ? '.pdf,.docx,.doc,.txt,.rtf,.md,image/*'
+    : kind === 'word'  ? '.docx'
+    : kind === 'pdf'   ? '.pdf'
+    : 'video/*');
   const label  = opt.label || (kind === 'audio' ? 'Drag &amp; drop an audio file' : 'Drag &amp; drop a video file');
   const sub    = opt.sub || (kind === 'audio'
       ? 'MP3, WAV, M4A, AAC, OGG, FLAC — from anywhere on your PC'
@@ -95,11 +109,17 @@ function makePicker(container, opt){
     const t = f.type || '';
     const byType = kind === 'audio' ? t.startsWith('audio/')
                  : kind === 'media' ? (t.startsWith('audio/') || t.startsWith('video/'))
-                                    : t.startsWith('video/');
+                 : kind === 'docs'  ? (t.startsWith('image/') || t === 'application/pdf')
+                 : (kind === 'word' || kind === 'pdf') ? false
+                 : t.startsWith('video/');
     return byType || re.test(f.name);
   };
 
-  const pick = f => { if (!f) return; clear(); opt.onFile(f); };
+  // single-file tools get onFile(f); multi-file tools get onFiles([...]) and the
+  // drop zone stays put so more files can be added
+  const pick = f => { if (!f) return; clear(); opt.multiple ? opt.onFiles([f]) : opt.onFile(f); };
+  const pickMany = fs => { if (!fs.length) return; clear(); opt.onFiles(fs); };
+  if (opt.multiple) fileIn.multiple = true;
 
   drop.onclick = e => { if (e.target.tagName !== 'BUTTON') fileIn.click(); };
   drop.querySelector('[data-act=file]').onclick = e => { e.stopPropagation(); fileIn.click(); };
@@ -114,14 +134,20 @@ function makePicker(container, opt){
     const files = [...e.dataTransfer.files];
     if (!files.length) return;
     const ok = files.filter(isMatch);
-    if (ok.length > 1) showFolder(ok); else pick(ok[0] || files[0]);
+    if (opt.multiple) pickMany(ok.length ? ok : files);
+    else if (ok.length > 1) showFolder(ok);
+    else pick(ok[0] || files[0]);
   });
 
-  fileIn.onchange = () => { pick(fileIn.files[0]); fileIn.value = ''; };
+  fileIn.onchange = () => {
+    if (opt.multiple) pickMany([...fileIn.files]); else pick(fileIn.files[0]);
+    fileIn.value = '';
+  };
   dirIn.onchange = () => {
     const ok = [...dirIn.files].filter(isMatch);
     dirIn.value = '';
     if (!ok.length) return fail('No matching files were found in that folder.');
+    if (opt.multiple) return pickMany(ok);
     if (ok.length === 1) return pick(ok[0]);
     showFolder(ok);
   };
@@ -436,7 +462,7 @@ const idle = () => new Promise(r => setTimeout(r, 0));
 
 root.Core = {
   $, el, fmtBytes, fmtTime, fmtClock, escapeHtml, baseName, download,
-  makePicker, VIDEO_RE, AUDIO_RE,
+  makePicker, VIDEO_RE, AUDIO_RE, DOC_RE, IMG_RE,
   FF, audioCtx, decodeAudio, encodeWAV, bufferToChannels, drawWave,
   crc32, buildZip, seek, idle,
 };

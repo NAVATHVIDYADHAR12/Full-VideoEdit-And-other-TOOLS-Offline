@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Video Toolkit</title>
+<title>Media &amp; Document Toolkit</title>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -11,8 +11,8 @@
 
   <!-- ============ home ============ -->
   <div id="home">
-    <h1>Video <span>Toolkit</span></h1>
-    <p class="sub">Six tools, one page. Everything runs on your own machine — no uploads, no accounts, no watermarks added.</p>
+    <h1>Media &amp; Document <span>Toolkit</span></h1>
+    <p class="sub">Nine tools, one page. Everything runs on your own machine — no uploads, no accounts, no watermarks added.</p>
     <div class="tools">
       <button class="tool" data-go="frames">
         <span class="ic">🖼️</span><b>Video → JPG frames</b>
@@ -42,6 +42,21 @@
       <button class="tool" data-go="denoise">
         <span class="ic">🎧</span><b>Noise cancellation</b>
         <small>Strip hiss, hum and background roar out of an audio file or a video's soundtrack.</small>
+        <span class="tag fast">instant · offline</span>
+      </button>
+      <button class="tool" data-go="mergepdf">
+        <span class="ic">📄</span><b>Merge anything into one PDF</b>
+        <small>Pick any number of PDFs, images, Word docs and text files — get back a single PDF in your chosen order.</small>
+        <span class="tag fast">instant · offline</span>
+      </button>
+      <button class="tool" data-go="mergeword">
+        <span class="ic">📝</span><b>Merge Word documents</b>
+        <small>Join several .docx files into one, keeping text, images, lists and styles.</small>
+        <span class="tag fast">instant · offline</span>
+      </button>
+      <button class="tool" data-go="convert">
+        <span class="ic">🔄</span><b>Convert documents</b>
+        <small>PDF → Word, PDF → images or text, Word → PDF, images → PDF.</small>
         <span class="tag fast">instant · offline</span>
       </button>
     </div>
@@ -386,9 +401,146 @@
 
 </div>
 
+  <!-- ============ 7. merge into one PDF ============ -->
+  <div id="panel-mergepdf" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Merge anything into one PDF</h2><p class="sub" style="margin:0">PDFs, images, Word docs and text, in any order.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <label style="margin:0">Files to merge</label>
+        <span class="hint" data-el="count" style="margin:0"></span>
+      </div>
+      <div data-el="list" style="margin-top:10px"></div>
+    </div>
+
+    <div data-el="body" class="card hide">
+      <div class="grid">
+        <div><label>Images</label>
+          <select data-el="imgfit">
+            <option value="page">Fit onto an A4 page</option>
+            <option value="native">One page the exact size of the image</option>
+          </select>
+          <div class="hint">How pictures are placed</div></div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Merge into one PDF →</button>
+        <button class="ghost" data-el="clear">Clear the list</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <iframe data-el="frame" style="width:100%;height:420px;margin-top:14px;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download PDF</button>
+        <button class="ghost" data-el="again">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 8. merge Word ============ -->
+  <div id="panel-mergeword" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Merge Word documents</h2><p class="sub" style="margin:0">Several .docx files, joined into one.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <label style="margin:0">Documents to merge</label>
+        <span class="hint" data-el="count" style="margin:0"></span>
+      </div>
+      <div data-el="list" style="margin-top:10px"></div>
+    </div>
+
+    <div data-el="body" class="card hide">
+      <div class="grid">
+        <div><label>Between documents</label>
+          <select data-el="breaks">
+            <option value="1">Start each on a new page</option>
+            <option value="0">Run straight on</option>
+          </select></div>
+      </div>
+      <div class="note" style="margin-top:16px">The first document sets the page size and styles.
+        Images, lists and numbering from every document are carried across.</div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Merge documents →</button>
+        <button class="ghost" data-el="clear">Clear the list</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download .docx</button>
+        <button class="ghost" data-el="again">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 9. convert ============ -->
+  <div id="panel-convert" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Convert documents</h2><p class="sub" style="margin:0">PDF ↔ Word, PDF → images or text, images → PDF.</p></div></div>
+
+    <div data-el="pick"></div>
+
+    <div data-el="body" class="card hide">
+      <div class="meta" data-el="info"></div>
+      <hr>
+      <div class="grid">
+        <div><label>Convert to</label>
+          <select data-el="format"></select>
+          <div class="hint" data-el="fmthint"></div></div>
+        <div><label>Rendering quality</label>
+          <select data-el="dpi">
+            <option value="96">96 DPI — small files</option>
+            <option value="150" selected>150 DPI — good</option>
+            <option value="220">220 DPI — sharp, larger</option>
+          </select>
+          <div class="hint">Only for page-image output</div></div>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button data-el="go">Convert →</button>
+        <button class="ghost" data-el="another">Choose another file</button>
+      </div>
+    </div>
+
+    <div data-el="job" class="card hide">
+      <div class="bar"><i></i></div>
+      <div class="status"><span data-el="stat">Working…</span></div>
+    </div>
+
+    <div data-el="done" class="card hide">
+      <div class="note ok" data-el="msg"></div>
+      <iframe data-el="frame" class="hide" style="width:100%;height:420px;margin-top:14px;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>
+      <div class="row" style="margin-top:16px">
+        <button data-el="save">⬇ Download</button>
+        <button class="ghost" data-el="again">Back</button>
+      </div>
+    </div>
+  </div>
+
 <script src="js/core.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/docx.js"></script>
 <script src="js/dsp.js"></script>
 <script src="js/wm.js"></script>
 <script src="js/tools.js"></script>
+<script src="js/docs.js"></script>
+<script src="js/doctools.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
-# Video Toolkit
+# Media & Document Toolkit
 
-Six video/audio tools that run entirely on your own machine. No uploads, no accounts,
+Nine video, audio and document tools that run entirely on your own machine. No uploads, no accounts,
 no server round-trips — your files never leave the computer.
 
 ## Setup after cloning
@@ -58,6 +58,9 @@ CSS and JS; all decoding, processing and encoding happens in the visitor's own b
 | **Mute a video** | Strips the audio track. Video is stream-copied — lossless and near-instant. | ffmpeg |
 | **Merge audio into video** | New soundtrack, replacing or mixed with the original. Video stream-copied. | ffmpeg |
 | **Noise cancellation** | Removes hiss, hum and background roar from audio or a video's soundtrack. | pure JS |
+| **Merge anything into one PDF** | Any number of PDFs, images, Word docs and text files, in your chosen order. | pure JS |
+| **Merge Word documents** | Joins .docx files, carrying over text, images, lists and numbering. | pure JS |
+| **Convert documents** | PDF → Word (two modes), PDF → images/text, Word → PDF, images → PDF. | pure JS |
 
 ## How the interesting bits work
 
@@ -76,11 +79,35 @@ CSS and JS; all decoding, processing and encoding happens in the visitor's own b
 windows, FFT'd, a per-frequency noise floor is estimated (from a stretch you mark on the
 waveform, or automatically from the quietest 12% of frames), that floor is subtracted with a
 small residual left in to avoid "musical noise", then it's resynthesised by overlap-add.
-Measured on synthetic speech + hiss: **16.6 dB noise reduction for 0.3 dB signal loss**,
-around 40× realtime. It runs in a Web Worker so the UI stays responsive.
+The signal is padded by one window before analysis, otherwise the edge samples get partial
+window coverage and the normalisation amplifies them into a burst of noise at the start of
+the file. Measured on synthetic speech + hiss: **17–18 dB noise reduction for 0.3 dB signal
+loss**, stable across runs, around 40× realtime. It runs in a Web Worker so the UI stays responsive.
 
 **Mute** and **Merge** use `-c:v copy`, so the video is remuxed rather than re-encoded.
 That means zero quality loss and near-instant completion regardless of video length.
+
+**PDF to Word** comes in two modes because there is a genuine trade-off:
+
+- **Editable text** reads the PDF's positioned glyphs, groups them into lines, then into
+  paragraphs, and infers headings from font size and bold/italic from font names. You get a
+  real, editable Word document — but multi-column layouts and tables flatten into ordinary
+  paragraphs. No browser can recover structure a PDF never stored; PDFs hold positioned
+  glyphs, not documents.
+- **Exact look** renders each page to an image and places it full-bleed in the document. It
+  looks identical to the PDF, but the text cannot be edited or selected.
+
+**Word to PDF** re-lays the content out rather than reproducing Word's exact pagination.
+Headings, bold/italic, lists, tables and images survive; precise line breaks do not. The
+built-in PDF fonts are Latin-only, so non-Latin characters are reported and replaced.
+
+**Not supported, deliberately:** PowerPoint (.ppt/.pptx) and legacy .doc. Those need a real
+Office engine such as LibreOffice, which cannot run in a browser. Save as PDF or .docx first.
+
+**The DOCX layer** (`js/docx.js`) builds, reads and merges Word files directly against
+ECMA-376 with no library. Merging remaps image relationship ids, shifts list-numbering ids
+clear of collisions, and carries across styles the base document does not already define.
+Output is validated against Windows' own OPC package reader — the same layer Word uses.
 
 **The ZIP writer** is hand-written (store-only, since JPEGs are already compressed). Its
 CRC32 is verified against zlib's and the output opens in Windows Explorer.
@@ -88,13 +115,18 @@ CRC32 is verified against zlib's and the output opens in Windows Explorer.
 ## Layout
 
 ```
-index.html        markup for all six tool panels
+index.html        markup for all nine tool panels
 css/app.css       styles
 js/core.js        shared: file pickers, ffmpeg loader, WAV codec, ZIP writer
+js/zip.js         ZIP read/write (DOCX is a ZIP), via CompressionStream
+js/docx.js        build / read / merge Word documents, no dependencies
+js/docs.js        PDF layout engine, PDF text reconstruction, page rendering
+js/doctools.js    the three document tool controllers
 js/dsp.js         FFT + spectral subtraction (dependency-free, unit-testable)
 js/wm.js          watermark box editor + canvas removal + ffmpeg filter generation
-js/tools.js       the six tool controllers
-vendor/           ffmpeg.wasm, vendored so it works offline (~65 MB)
+js/tools.js       the six media tool controllers
+lib/              pdf-lib, pdf.js, mammoth (2.6 MB, deployed with the app)
+vendor/           ffmpeg.wasm, vendored so it works offline (~62 MB, local only)
 server.js         static server that sends COOP/COEP for multithreading
 ```
 
@@ -105,3 +137,6 @@ server.js         static server that sends COOP/COEP for multithreading
 - Asking for 30 fps from a 24 fps source gives duplicated frames. That's inherent.
 - A watermark that moves needs a box covering its full range of motion.
 - Very large videos are held in browser memory; multi-GB files may run out.
+- PDF → Word cannot recover tables or columns as real Word tables; see above.
+- PowerPoint and legacy .doc are not supported at all.
+- The built-in PDF fonts cover Latin only; other scripts become "?" and are reported.
