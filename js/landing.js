@@ -1,5 +1,5 @@
-/* landing.js — floating navigation, the scroll-scrubbed frame sequence, and
- * the reveal transitions.
+/* landing.js — floating navigation, the scroll-scrubbed hero, the treadmill
+ * band, and the staged reveal transitions.
  *
  * The hero frames are real output from this app's own frame extractor, so the
  * page demonstrates the product simply by existing.
@@ -17,16 +17,61 @@ const hero     = document.getElementById('hero');
 const canvas   = document.getElementById('heroframes');
 const counter  = document.getElementById('framecount');
 const heroInner= document.getElementById('heroinner');
+const toTop    = document.getElementById('totop');
 
-/* ================= floating nav ================= */
-let stuck = false;
-function onScrollNav(){
-  const should = window.scrollY > 24;
-  if (should !== stuck){
-    stuck = should;
-    nav.classList.toggle('stuck', stuck);
-  }
+/* ================= navigation behaviour =================
+ * Two states worth separating: "has the page moved at all", which turns the bar
+ * into a solid object, and "which way are you going", which hides or shows it.
+ */
+let lastY = window.scrollY;
+let navSolid = false, navHidden = false, topShown = false, overTop = false;
+
+function setSolid(on){
+  if (on === navSolid) return;
+  navSolid = on;
+  nav.classList.toggle('stuck', on);
 }
+function setHidden(on){
+  if (on === navHidden) return;
+  navHidden = on;
+  nav.classList.toggle('hidden', on);
+}
+function setTop(on){
+  if (on === topShown || !toTop) return;
+  topShown = on;
+  toTop.classList.toggle('show', on);
+}
+
+function onDirection(){
+  const y = Math.max(0, window.scrollY);
+  setSolid(y > 24);
+
+  // near the top nothing is hidden and nothing is offered
+  if (y < 140){
+    lastY = y;
+    setHidden(false);
+    if (!overTop) setTop(false);
+    return;
+  }
+  const dy = y - lastY;
+  if (Math.abs(dy) < 6) return;      // ignore the jitter of a trackpad settling
+  lastY = y;
+
+  const goingDown = dy > 0;
+  setHidden(goingDown);              // nav steps aside on the way down
+  if (!overTop) setTop(goingDown);   // and the return button takes its place
+}
+
+if (toTop){
+  // do not let it vanish out from under the cursor mid-click
+  toTop.addEventListener('pointerenter', () => { overTop = true; });
+  toTop.addEventListener('pointerleave', () => { overTop = false; });
+  toTop.addEventListener('click', () => {
+    window.scrollTo({ top:0, behavior:'smooth' });
+    setTop(false);
+  });
+}
+
 if (navToggle){
   navToggle.onclick = () => navLinks.classList.toggle('open');
   navLinks.addEventListener('click', e => {
@@ -34,7 +79,6 @@ if (navToggle){
   });
 }
 
-/* in-page anchors scroll smoothly; everything else is left alone */
 document.querySelectorAll('a[data-scroll]').forEach(a => {
   a.addEventListener('click', e => {
     const target = document.querySelector(a.getAttribute('href'));
@@ -86,16 +130,16 @@ function update(){
   if (i !== lastDrawn){ lastDrawn = i; draw(i); }
 
   hero.classList.toggle('scrolled', progress > 0.02);
-  // the words step aside for the footage, then come back for the closing line
+  // the words step aside for the footage as the sequence plays out
   if (heroInner){
-    const fade = progress < 0.55 ? 1 : Math.max(0, 1 - (progress - 0.55) / 0.3);
+    const fade = progress < 0.6 ? 1 : Math.max(0, 1 - (progress - 0.6) / 0.28);
     heroInner.style.opacity = fade.toFixed(3);
     heroInner.style.transform = 'translateY(' + (-(1 - fade) * 26).toFixed(1) + 'px)';
   }
 }
 
 function onScroll(){
-  onScrollNav();
+  onDirection();
   if (!ticking){ ticking = true; requestAnimationFrame(update); }
 }
 
@@ -105,20 +149,19 @@ async function preload(){
   draw(0);
   const CONCURRENCY = 6;
   let next = 1;
-  const workers = new Array(CONCURRENCY).fill(0).map(async () => {
+  await Promise.all(new Array(CONCURRENCY).fill(0).map(async () => {
     while (next < FRAME_COUNT){
       const i = next++;
       await load(i);
-      if (i === lastDrawn) draw(i);       // repaint if the user already scrolled here
+      if (i === lastDrawn) draw(i);      // repaint if the reader is already there
     }
-  });
-  await Promise.all(workers);
+  }));
   update();
 }
 
 if (canvas){
   canvas.width = 900;
-  canvas.height = 506;                    // CSS object-fit does the cropping
+  canvas.height = 506;                   // CSS object-fit does the cropping
   ctx = canvas.getContext('2d', { alpha:false });
   ctx.fillStyle = '#080808';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -129,20 +172,31 @@ window.addEventListener('scroll', onScroll, { passive:true });
 window.addEventListener('resize', () => { lastDrawn = -1; update(); }, { passive:true });
 onScroll();
 
-/* ================= reveal on entry ================= */
+/* ================= treadmill =================
+ * The loop only looks seamless because the track holds two identical copies and
+ * the animation travels exactly half its width.
+ */
+document.querySelectorAll('.btrack').forEach(track => {
+  const original = track.innerHTML;
+  track.innerHTML = original + original;
+});
+
+/* ================= staged reveals =================
+ * Not one-shot: the class comes off again once a block has fully left, so the
+ * sequence replays every time you scroll back to it.
+ */
 const io = 'IntersectionObserver' in window
-  ? new IntersectionObserver((entries) => {
+  ? new IntersectionObserver(entries => {
       for (const e of entries){
-        if (!e.isIntersecting) continue;
-        e.target.classList.add('in');
-        io.unobserve(e.target);
+        if (e.isIntersecting) e.target.classList.add('in');
+        // only reset once it is properly gone, or it flickers at the edges
+        else if (e.boundingClientRect.top > window.innerHeight ||
+                 e.boundingClientRect.bottom < 0) e.target.classList.remove('in');
       }
-    }, { rootMargin:'0px 0px -12% 0px', threshold:0.05 })
+    }, { rootMargin:'0px 0px -10% 0px', threshold:[0, 0.08] })
   : null;
 
-document.querySelectorAll('[data-reveal]').forEach((n, i) => {
-  // a short stagger inside a group, capped so nothing ever feels slow
-  n.style.transitionDelay = Math.min(i % 6, 5) * 70 + 'ms';
+document.querySelectorAll('[data-reveal]').forEach(n => {
   if (io) io.observe(n); else n.classList.add('in');
 });
 

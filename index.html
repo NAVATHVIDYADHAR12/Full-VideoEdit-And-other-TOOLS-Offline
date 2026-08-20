@@ -25,7 +25,7 @@
 <div id="landing">
 
   <!-- ============ hero ============ -->
-  <section class="hero" id="hero">
+  <section class="hero in" id="hero" data-reveal>
     <div class="herostage">
       <canvas id="heroframes" aria-hidden="true"></canvas>
 
@@ -38,22 +38,23 @@
 
       <div class="shell heroinner" id="heroinner">
         <div class="herorule" aria-hidden="true"></div>
-        <h1 class="display">Your studio,<br>entirely <em>offline</em>.</h1>
-        <p class="lede">
+        <h1 class="display" data-stage="1">Your studio,<br>entirely <em>offline</em>.</h1>
+        <p class="lede" data-stage="2">
           A timeline editor, watermark removal, frame extraction, audio work and document
           conversion &mdash; ten tools that run inside your browser. No account, no upload,
           no server ever sees your footage.
         </p>
-        <div class="heroactions">
+        <div class="heroactions" data-stage="3">
           <button class="btn-gold" data-go="editor">Open the editor</button>
           <a class="btn-ghost" href="#tools" data-scroll>Browse the tools</a>
         </div>
+
+        <a class="scrollcue" href="#features" data-scroll>
+          <span>Scroll</span>
+          <i aria-hidden="true"></i>
+        </a>
       </div>
 
-      <div class="scrollcue" aria-hidden="true">
-        <span>Scroll</span>
-        <i></i>
-      </div>
     </div>
   </section>
 
@@ -61,8 +62,8 @@
   <section class="section" id="features">
     <div class="shell">
       <div class="sechead" data-reveal>
-        <p class="eyebrow">Capabilities</p>
-        <h2>Built for the work, <em>not the demo</em>.</h2>
+        <p class="eyebrow" data-stage="1">Capabilities</p>
+        <h2 data-stage="1">Built for the work, <em>not the demo</em>.</h2>
         <p>
           Every tool here exists because it had a job to do. Each one processes your files
           on your own machine, at full quality, and tells you plainly what it can and
@@ -72,20 +73,20 @@
 
       <!-- 1 · editor -->
       <div class="feature" data-reveal>
-        <div class="fcopy">
+        <div class="fcopy" data-stage="2">
           <span class="badge">Non-linear editor</span>
-          <h3>A real timeline, not a trimmer.</h3>
+          <h3 data-stage="1">A real timeline, not a trimmer.</h3>
           <p>
             Drag video, audio and stills onto layered tracks. Trim by the edge, split at the
             playhead, move clips between tracks, and watch the result compose live.
           </p>
-          <ul class="facts">
+          <ul class="facts" data-stage="3">
             <li><b>Overwrite editing</b> &mdash; dropping a clip splits what it lands on, exactly as an editor should</li>
             <li><b>Per-clip control</b> &mdash; opacity, scale, position, rotation, speed, volume, fades</li>
             <li><b>Frame-accurate export</b> &mdash; every source seeked to an exact time, so renders never depend on machine speed</li>
           </ul>
         </div>
-        <div class="shot" aria-hidden="true">
+        <div class="shot pop" data-stage="3" aria-hidden="true">
           <div class="tldemo">
             <div class="tlruler"><span>0:00</span><span>0:04</span><span>0:08</span><span>0:12</span><span>0:16</span></div>
             <div class="tlrow">
@@ -109,20 +110,20 @@
 
       <!-- 2 · watermark -->
       <div class="feature flip" data-reveal>
-        <div class="fcopy">
+        <div class="fcopy" data-stage="2">
           <span class="badge">Restoration</span>
-          <h3>Erase what should not be there.</h3>
+          <h3 data-stage="1">Erase what should not be there.</h3>
           <p>
             Box the logo or the burned-in timestamp and choose how it goes: inpainted from the
             surrounding pixels, blurred, pixelated, or cropped away entirely.
           </p>
-          <ul class="facts">
+          <ul class="facts" data-stage="3">
             <li><b>Inpainting</b> solves a Laplace fill across the hole &mdash; near-perfect over sky, blur and gradients</li>
             <li><b>Honest about limits</b> &mdash; over fine texture it smudges, and the tool says so rather than pretending</li>
             <li><b>Crop</b> removes the pixels outright when the background is too busy to fake</li>
           </ul>
         </div>
-        <div class="shot" aria-hidden="true">
+        <div class="shot pop" data-stage="3" aria-hidden="true">
           <img src="assets/hero/f026.jpg" alt="">
           <div class="wmdemo" data-label="Region" style="left:58%;top:64%;width:32%;height:22%"><i></i></div>
         </div>
@@ -130,20 +131,20 @@
 
       <!-- 3 · frames -->
       <div class="feature" data-reveal>
-        <div class="fcopy">
+        <div class="fcopy" data-stage="2">
           <span class="badge rare">The original tool</span>
-          <h3>Every frame, exactly.</h3>
+          <h3 data-stage="1">Every frame, exactly.</h3>
           <p>
             Pull a clip apart into numbered JPEGs at any frame rate and download the lot as a
             single archive. The frames behind this page came out of it.
           </p>
-          <ul class="facts">
+          <ul class="facts" data-stage="3">
             <li><b>Any rate</b> &mdash; 30&nbsp;fps by default, or one frame every few seconds</li>
             <li><b>Hand-written ZIP writer</b> &mdash; no library, verified against Windows' own archive reader</li>
             <li><b>Watermark removal</b> can be baked into every frame as it is written</li>
           </ul>
         </div>
-        <div class="shot" aria-hidden="true">
+        <div class="shot pop" data-stage="3" aria-hidden="true">
           <div class="strip">
             <span><img src="assets/hero/f004.jpg" alt=""></span>
             <span><img src="assets/hero/f019.jpg" alt=""></span>
@@ -156,20 +157,20 @@
 
       <!-- 4 · documents -->
       <div class="feature flip" data-reveal>
-        <div class="fcopy">
+        <div class="fcopy" data-stage="2">
           <span class="badge">Documents</span>
-          <h3>Papers, handled with the same care.</h3>
+          <h3 data-stage="1">Papers, handled with the same care.</h3>
           <p>
             Merge anything into one PDF, join Word files, or convert between them &mdash; with
             structure preserved rather than flattened into a picture.
           </p>
-          <ul class="facts">
+          <ul class="facts" data-stage="3">
             <li><b>PDF to Word</b> rebuilds paragraphs, runs, pictures and column-aligned tables as real Word objects</li>
             <li><b>Position kept</b> &mdash; the page size is copied and images are anchored to their original coordinates</li>
             <li><b>Written against ECMA-376</b>, validated by the same package reader Word itself uses</li>
           </ul>
         </div>
-        <div class="shot" aria-hidden="true">
+        <div class="shot pop" data-stage="3" aria-hidden="true">
           <div class="docdemo"><span></span><span></span><span></span></div>
         </div>
       </div>
@@ -180,15 +181,15 @@
   <section class="section" id="craft">
     <div class="shell">
       <div class="sechead" data-reveal>
-        <p class="eyebrow">Craft</p>
-        <h2>Nothing leaves <em>your machine</em>.</h2>
+        <p class="eyebrow" data-stage="1">Craft</p>
+        <h2 data-stage="1">Nothing leaves <em>your machine</em>.</h2>
         <p>
           Not a marketing line &mdash; an architectural fact. There is no upload endpoint in this
           application. Decoding, processing and encoding all happen in your browser, which is
           why it still works with the network unplugged.
         </p>
       </div>
-      <div class="stats" data-reveal>
+      <div class="stats" data-reveal data-stage="1">
         <div><b>10</b><small>Tools</small></div>
         <div><b>0</b><small>Bytes uploaded</small></div>
         <div><b>13</b><small>Test suites</small></div>
@@ -201,12 +202,12 @@
   <section class="section" id="tools">
     <div class="shell">
       <div class="sechead" data-reveal>
-        <p class="eyebrow">The collection</p>
-        <h2>Ten tools, <em>one page</em>.</h2>
+        <p class="eyebrow" data-stage="1">The collection</p>
+        <h2 data-stage="1">Ten tools, <em>one page</em>.</h2>
         <p>Pick one and it opens in place. Your files never move off the machine.</p>
       </div>
 
-      <div class="toolgrid" data-reveal>
+      <div class="toolgrid" data-reveal data-stage="1">
         <button class="toolcard" data-go="editor">
           <span class="num">01</span><b>Video editor</b>
           <small>A timeline with layered video and audio tracks, trimming, splitting, effects and text &mdash; rendered to MP4.</small>
@@ -263,6 +264,34 @@
     </div>
   </section>
 
+  <!-- ============ treadmill ============ -->
+  <section class="belt" aria-hidden="true">
+    <div class="brow slow">
+      <div class="btrack">
+        <span>Timeline editing</span><i></i><span>Watermark removal</span><i></i>
+        <span>Frame extraction</span><i></i><span>Audio mixing</span><i></i>
+        <span>Noise reduction</span><i></i><span>Document conversion</span><i></i>
+        <span>Lossless muting</span><i></i><span>Soundtrack merging</span><i></i>
+      </div>
+    </div>
+    <div class="brow fast rev">
+      <div class="btrack">
+        <span>MP4</span><i></i><span>WebM</span><i></i><span>MOV</span><i></i>
+        <span>MKV</span><i></i><span>WAV</span><i></i><span>MP3</span><i></i>
+        <span>M4A</span><i></i><span>FLAC</span><i></i><span>PDF</span><i></i>
+        <span>DOCX</span><i></i><span>JPEG</span><i></i><span>PNG</span><i></i>
+      </div>
+    </div>
+    <div class="brow mid">
+      <div class="btrack">
+        <span>Nothing uploaded</span><i></i><span>Frame accurate</span><i></i>
+        <span>Laplace inpainting</span><i></i><span>Spectral subtraction</span><i></i>
+        <span>Stream copy</span><i></i><span>WebCodecs</span><i></i>
+        <span>Runs offline</span><i></i><span>ECMA-376</span><i></i>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ footer ============ -->
   <footer class="foot">
     <div class="shell">
@@ -305,7 +334,7 @@
   <!-- ============ 1. frames ============ -->
   <div id="panel-frames" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Video → JPG frames</h2><p class="sub" style="margin:0">Every frame as a numbered JPEG, zipped.</p></div></div>
+      <div><h2 data-stage="1">Video → JPG frames</h2><p class="sub" style="margin:0">Every frame as a numbered JPEG, zipped.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -362,7 +391,7 @@
   <!-- ============ 2. watermark → video ============ -->
   <div id="panel-wmvideo" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Remove watermark from video</h2><p class="sub" style="margin:0">Clean video out, audio kept as-is.</p></div></div>
+      <div><h2 data-stage="1">Remove watermark from video</h2><p class="sub" style="margin:0">Clean video out, audio kept as-is.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -414,7 +443,7 @@
   <!-- ============ 3. extract audio ============ -->
   <div id="panel-extract" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Extract audio from video</h2><p class="sub" style="margin:0">Save the soundtrack as its own file.</p></div></div>
+      <div><h2 data-stage="1">Extract audio from video</h2><p class="sub" style="margin:0">Save the soundtrack as its own file.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -470,7 +499,7 @@
   <!-- ============ 4. mute ============ -->
   <div id="panel-mute" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Mute a video</h2><p class="sub" style="margin:0">Take the sound off. The picture is copied untouched.</p></div></div>
+      <div><h2 data-stage="1">Mute a video</h2><p class="sub" style="margin:0">Take the sound off. The picture is copied untouched.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -519,7 +548,7 @@
   <!-- ============ 5. merge ============ -->
   <div id="panel-merge" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Merge audio into video</h2><p class="sub" style="margin:0">Give a video a new soundtrack.</p></div></div>
+      <div><h2 data-stage="1">Merge audio into video</h2><p class="sub" style="margin:0">Give a video a new soundtrack.</p></div></div>
 
     <div class="card">
       <label>1 · The video</label>
@@ -579,7 +608,7 @@
   <!-- ============ 6. noise cancellation ============ -->
   <div id="panel-denoise" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Noise cancellation</h2><p class="sub" style="margin:0">Take the hiss, hum and background roar out.</p></div></div>
+      <div><h2 data-stage="1">Noise cancellation</h2><p class="sub" style="margin:0">Take the hiss, hum and background roar out.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -643,7 +672,7 @@
   <!-- ============ 7. merge into one PDF ============ -->
   <div id="panel-mergepdf" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Merge anything into one PDF</h2><p class="sub" style="margin:0">PDFs, images, Word docs and text, in any order.</p></div></div>
+      <div><h2 data-stage="1">Merge anything into one PDF</h2><p class="sub" style="margin:0">PDFs, images, Word docs and text, in any order.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -688,7 +717,7 @@
   <!-- ============ 8. merge Word ============ -->
   <div id="panel-mergeword" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Merge Word documents</h2><p class="sub" style="margin:0">Several .docx files, joined into one.</p></div></div>
+      <div><h2 data-stage="1">Merge Word documents</h2><p class="sub" style="margin:0">Several .docx files, joined into one.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -733,7 +762,7 @@
   <!-- ============ 9. convert ============ -->
   <div id="panel-convert" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Convert documents</h2><p class="sub" style="margin:0">PDF ↔ Word, PDF → images or text, images → PDF.</p></div></div>
+      <div><h2 data-stage="1">Convert documents</h2><p class="sub" style="margin:0">PDF ↔ Word, PDF → images or text, images → PDF.</p></div></div>
 
     <div data-el="pick"></div>
 
@@ -795,7 +824,7 @@
   <!-- ============ 10. video editor ============ -->
   <div id="panel-editor" class="panel hide">
     <div class="crumb"><button data-back>← All tools</button>
-      <div><h2>Video editor</h2><p class="sub" style="margin:0">Timeline, tracks, clips, effects — rendered to an MP4.</p></div></div>
+      <div><h2 data-stage="1">Video editor</h2><p class="sub" style="margin:0">Timeline, tracks, clips, effects — rendered to an MP4.</p></div></div>
 
     <div class="nletop">
       <div class="nlecol">
@@ -890,6 +919,42 @@
     </div>
   </div>
 
+
+<!-- ============ floating actions ============ -->
+<button class="fab totop" id="totop" aria-label="Back to top" title="Back to top">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<button class="fab chatfab" id="chatfab" aria-label="Open the assistant">
+  <svg viewBox="0 0 24 24" aria-hidden="true" class="i-open">
+    <path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/>
+  </svg>
+  <svg viewBox="0 0 24 24" aria-hidden="true" class="i-close"><path d="M18 6 6 18M6 6l12 12"/></svg>
+</button>
+
+<!-- ============ assistant ============ -->
+<div class="chat" id="chat" role="dialog" aria-label="Studio assistant" aria-modal="false">
+  <header class="chathead">
+    <span class="pulse" aria-hidden="true"></span>
+    <div class="ct">
+      <b>Studio Assistant</b>
+      <small>Answers about this toolkit &middot; runs offline</small>
+    </div>
+    <button class="chatclose" id="chatclose" aria-label="Close">&times;</button>
+  </header>
+
+  <div class="chatlog" id="chatlog" aria-live="polite"></div>
+
+  <div class="chips" id="chatchips"></div>
+
+  <form class="chatform" id="chatform" autocomplete="off">
+    <input id="chatinput" type="text" placeholder="Ask which tool to use&hellip;" aria-label="Your question">
+    <button type="submit" aria-label="Send">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+</div>
+
 <script src="js/core.js"></script>
 <script src="js/zip.js"></script>
 <script src="js/docx.js"></script>
@@ -902,5 +967,6 @@
 <script src="js/nle-render.js"></script>
 <script src="js/nle-ui.js"></script>
 <script src="js/landing.js"></script>
+<script src="js/assistant.js"></script>
 </body>
 </html>
