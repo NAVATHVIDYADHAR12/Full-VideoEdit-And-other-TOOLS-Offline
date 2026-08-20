@@ -309,6 +309,55 @@ class Cancelled extends Error {
   constructor(){ super('Export cancelled.'); this.cancelled = true; }
 }
 
+/* ---- H.264 bitstream shape ----
+ * We ask the encoder for Annex-B (NALs separated by 00 00 00 01), which is what
+ * ffmpeg's raw h264 demuxer reads. Not every browser honours that hint; some
+ * return AVCC instead, where each NAL carries a length prefix and the SPS/PPS
+ * live outside the stream in decoderConfig.description. Muxing AVCC as if it
+ * were Annex-B produces an unplayable file, so detect it and convert.
+ */
+const isAnnexB = c =>
+  !!c && c.length >= 4 && c[0] === 0 && c[1] === 0 &&
+  (c[2] === 1 || (c[2] === 0 && c[3] === 1));
+
+function avccToAnnexB(chunks, description){
+  const START = Uint8Array.of(0,0,0,1);
+  const parts = [];
+  let nalLen = 4;
+
+  if (description){
+    const d = description instanceof Uint8Array ? description : new Uint8Array(description);
+    if (d.length > 6){
+      nalLen = (d[4] & 0x03) + 1;
+      let p = 5;
+      const readSet = count => {
+        for (let i = 0; i < count && p + 2 <= d.length; i++){
+          const len = (d[p] << 8) | d[p+1];
+          p += 2;
+          if (len <= 0 || p + len > d.length) break;
+          parts.push(START, d.slice(p, p + len));   // parameter sets go in-band
+          p += len;
+        }
+      };
+      readSet(d[p++] & 0x1f);                       // SPS
+      if (p < d.length) readSet(d[p++]);            // PPS
+    }
+  }
+
+  for (const c of chunks){
+    let p = 0;
+    while (p + nalLen <= c.length){
+      let len = 0;
+      for (let k = 0; k < nalLen; k++) len = (len * 256) + c[p + k];
+      p += nalLen;
+      if (len <= 0 || p + len > c.length) break;
+      parts.push(START, c.slice(p, p + len));
+      p += len;
+    }
+  }
+  return parts;
+}
+
 /**
  * Render the timeline to an MP4.
  * hooks: {onStage, onProgress, onPhase('audio'|'encode'|'mux'), shouldStop}
@@ -374,9 +423,11 @@ async function exportProject(project, opts, hooks){
   if (useCodecs){
     say('Encoding video…');
     const chunks = [];
-    let encErr = null;
+    let encErr = null, codecDesc = null;
     const encoder = new root.VideoEncoder({
-      output: chunk => {
+      output: (chunk, metadata) => {
+        if (!codecDesc && metadata && metadata.decoderConfig && metadata.decoderConfig.description)
+          codecDesc = metadata.decoderConfig.description;
         const b = new Uint8Array(chunk.byteLength);
         chunk.copyTo(b);
         chunks.push(b);
@@ -417,9 +468,20 @@ async function exportProject(project, opts, hooks){
     }
     if (encErr) throw new Error('Video encoder failed: ' + encErr.message);
 
+    if (!chunks.length) throw new Error('The encoder produced no data.');
+
+    // if the browser ignored the Annex-B request, repackage rather than emit a
+    // file ffmpeg cannot parse
+    let parts = chunks;
+    if (!isAnnexB(chunks[0])){
+      say('Repackaging the bitstream…');
+      parts = avccToAnnexB(chunks, codecDesc);
+      if (!parts.length) throw new Error('The encoder returned a bitstream that could not be muxed.');
+    }
+
     // hand ffmpeg a Blob rather than one big concatenated array: the browser can
     // back it with disk, and it halves peak memory on long timelines
-    inputs.push({ name:'v.h264', data: new Blob(chunks, { type:'application/octet-stream' }) });
+    inputs.push({ name:'v.h264', data: new Blob(parts, { type:'application/octet-stream' }) });
 
   } else {
     say('Rendering frames…');
@@ -483,6 +545,7 @@ async function exportProject(project, opts, hooks){
 }
 
 root.NleRender = { importFile, mediaOf, renderFrame, mixdown, exportProject,
-                   webCodecsAvailable, filterString, kindOf, seekSmart, releasePool };
+                   webCodecsAvailable, filterString, kindOf, seekSmart, releasePool,
+                   isAnnexB, avccToAnnexB };
 
 })(window);
