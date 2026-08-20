@@ -10,7 +10,7 @@
 'use strict';
 
 const C = root.Core, N = root.Nle;
-const { seek, idle, encodeWAV } = C;
+const { idle, encodeWAV } = C;
 
 /* ================= media import ================= */
 const kindOf = file => {
@@ -25,17 +25,13 @@ const kindOf = file => {
   return null;
 };
 
-/**
- * Load a file into the project's media pool. Video and audio get a decoded
- * AudioBuffer too where possible — that is what the export mixdown works from.
- */
 async function importFile(project, file, onNote){
   const kind = kindOf(file);
   if (!kind) throw new Error(file.name + ' is not a video, audio or image file.');
   const url = URL.createObjectURL(file);
 
   const media = { name:file.name, kind, file, url, duration:0, width:0, height:0,
-                  audio:null, hasAudio:false };
+                  audio:null, hasAudio:false, pool:{} };
 
   if (kind === 'image'){
     const img = new Image();
@@ -43,7 +39,7 @@ async function importFile(project, file, onNote){
     media.el = img;
     media.width = img.naturalWidth;
     media.height = img.naturalHeight;
-    media.duration = 5;                       // images get a default 5s on the timeline
+    media.duration = 5;
   } else {
     const el = document.createElement(kind === 'video' ? 'video' : 'audio');
     el.src = url;
@@ -60,13 +56,6 @@ async function importFile(project, file, onNote){
     media.width = el.videoWidth || 0;
     media.height = el.videoHeight || 0;
 
-    // a separate element is used for export seeking so preview playback is undisturbed
-    if (kind === 'video'){
-      const ex = document.createElement('video');
-      ex.src = url; ex.preload = 'auto'; ex.muted = true; ex.playsInline = true;
-      media.exportEl = ex;
-    }
-
     try {
       media.audio = await C.decodeAudio(file);
       media.hasAudio = media.audio.numberOfChannels > 0 && media.audio.length > 0;
@@ -76,11 +65,86 @@ async function importFile(project, file, onNote){
       if (onNote) onNote(file.name + ': the picture imported fine, but its audio could not be decoded here.');
     }
   }
-
   return N.addMedia(project, media);
 }
 
 const mediaOf = (project, id) => project.media.find(m => m.id === id);
+
+/**
+ * One dedicated <video> per CLIP for export.
+ * A single element can only show one time at once, so two clips of the same
+ * media playing simultaneously on different tracks would fight over it and one
+ * would render the wrong frame.
+ */
+function exportElFor(media, clip){
+  if (media.kind !== 'video') return media.el;
+  let el = media.pool[clip.id];
+  if (!el){
+    el = document.createElement('video');
+    el.src = media.url;
+    el.preload = 'auto';
+    el.muted = true;
+    el.playsInline = true;
+    media.pool[clip.id] = el;
+  }
+  return el;
+}
+
+function releasePool(project){
+  for (const m of project.media){
+    if (!m.pool) continue;
+    for (const k of Object.keys(m.pool)){ try { m.pool[k].src = ''; } catch(_){} delete m.pool[k]; }
+  }
+}
+
+/* ================= frame-accurate seeking =================
+ * requestVideoFrameCallback reports mediaTime — the presentation time of the
+ * frame actually on screen. Recording it lets us skip a seek entirely when the
+ * element is already showing the frame we want, which is the common case
+ * whenever the timeline fps is higher than the source fps.
+ */
+function markFrame(el, meta){
+  if (!meta || meta.mediaTime == null) return;
+  const prev = el._nleMediaTime;
+  if (prev != null && meta.mediaTime > prev){
+    const d = meta.mediaTime - prev;
+    // the smallest positive step observed approximates the source frame duration;
+    // underestimating only costs us a skip, so this errs safe
+    if (d > 5e-4 && d < 1) el._nleFrameDur = Math.min(el._nleFrameDur || d, d);
+  }
+  el._nleMediaTime = meta.mediaTime;
+}
+
+function seekSmart(el, want){
+  const mt = el._nleMediaTime, fd = el._nleFrameDur;
+  if (mt != null && fd && want >= mt && want < mt + fd * 0.95){
+    el._nleSkipped = (el._nleSkipped || 0) + 1;
+    return Promise.resolve(false);                 // already displaying this frame
+  }
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(guard);
+      el.removeEventListener('seeked', onSeeked);
+      resolve(true);
+    };
+    const onSeeked = () => {
+      if (el.requestVideoFrameCallback){
+        el.requestVideoFrameCallback((_, meta) => { markFrame(el, meta); finish(); });
+        setTimeout(() => { if (!done){ el._nleMediaTime = el.currentTime; finish(); } }, 40);
+      } else {
+        el._nleMediaTime = el.currentTime;
+        finish();
+      }
+    };
+    const guard = setTimeout(finish, 5000);
+    el.addEventListener('seeked', onSeeked, { once:true });
+    try { el.currentTime = Math.min(want, Math.max(0, el.duration - 0.001)); }
+    catch(_){ finish(); }
+  });
+}
 
 /* ================= compositing ================= */
 function filterString(f){
@@ -94,7 +158,6 @@ function filterString(f){
   return parts.length ? parts.join(' ') : 'none';
 }
 
-/** Draw one source into the frame, honouring transform, filters and opacity. */
 function paint(ctx, src, sw, sh, project, clip, t, fit){
   if (!sw || !sh) return;
   const W = project.width, H = project.height;
@@ -102,7 +165,6 @@ function paint(ctx, src, sw, sh, project, clip, t, fit){
   const alpha = N.opacityAt(clip, t);
   if (alpha <= 0.001) return;
 
-  // "contain" keeps the whole frame visible; "cover" fills and crops
   const s = fit === 'cover' ? Math.max(W/sw, H/sh) : Math.min(W/sw, H/sh);
   const scale = s * (tr.scale == null ? 1 : tr.scale);
   const dw = sw * scale, dh = sh * scale;
@@ -148,8 +210,8 @@ function paintText(ctx, project, clip, t){
 
 /**
  * Paint the whole timeline at time t.
- * @param {boolean} exact  seek every source first (export); otherwise use whatever
- *                         frame the element is currently showing (preview)
+ * With `exact`, every source is seeked first — and all of them in PARALLEL,
+ * because seeking three tracks one after another triples the wait per frame.
  */
 async function renderFrame(ctx, project, t, exact){
   const W = project.width, H = project.height;
@@ -161,27 +223,33 @@ async function renderFrame(ctx, project, t, exact){
   ctx.restore();
 
   const { video } = N.activeAt(project, t);
+
+  if (exact){
+    await Promise.all(video.map(async ({ clip }) => {
+      if (clip.kind !== 'video') return;
+      const m = mediaOf(project, clip.mediaId);
+      if (!m) return;
+      const el = exportElFor(m, clip);
+      const want = Math.min(N.sourceTime(clip, t), Math.max(0, m.duration - 0.001));
+      try { await seekSmart(el, want); } catch(_){ /* keep whatever frame we have */ }
+    }));
+  }
+
   for (const { clip } of video){
     if (clip.kind === 'text'){ paintText(ctx, project, clip, t); continue; }
     const m = mediaOf(project, clip.mediaId);
     if (!m) continue;
-
     if (clip.kind === 'image'){
       paint(ctx, m.el, m.width, m.height, project, clip, t, clip.fit || 'contain');
       continue;
     }
-    const el = exact ? (m.exportEl || m.el) : m.el;
-    if (exact){
-      const want = Math.min(N.sourceTime(clip, t), Math.max(0, m.duration - 0.001));
-      try { await seek(el, want); } catch(_){ /* keep going with whatever frame we have */ }
-    }
+    const el = exact ? exportElFor(m, clip) : m.el;
     paint(ctx, el, el.videoWidth || m.width, el.videoHeight || m.height,
           project, clip, t, clip.fit || 'contain');
   }
 }
 
 /* ================= audio mixdown ================= */
-/** Render every audio-bearing clip into one buffer, with fades and speed. */
 async function mixdown(project, duration, onProgress){
   const sr = project.sampleRate || 48000;
   const frames = Math.max(1, Math.ceil(duration * sr));
@@ -221,9 +289,8 @@ async function mixdown(project, duration, onProgress){
     }
 
     src.connect(gain).connect(ctx.destination);
-    // offset is in SOURCE time; duration passed to start() is in source time too
     const srcDur = clip.duration * (clip.speed || 1);
-    try { src.start(t0, clip.inPoint, srcDur); } catch(_){ /* clip outside the buffer */ }
+    try { src.start(t0, clip.inPoint, srcDur); } catch(_){ }
     src.stop(t1 + 0.001);
   }
 
@@ -238,39 +305,74 @@ async function mixdown(project, duration, onProgress){
 const webCodecsAvailable = () =>
   typeof root.VideoEncoder === 'function' && typeof root.VideoFrame === 'function';
 
+class Cancelled extends Error {
+  constructor(){ super('Export cancelled.'); this.cancelled = true; }
+}
+
 /**
  * Render the timeline to an MP4.
- * hooks: {onStage(text), onProgress(0..1), shouldStop()}
+ * hooks: {onStage, onProgress, onPhase('audio'|'encode'|'mux'), shouldStop}
  */
 async function exportProject(project, opts, hooks){
   opts = opts || {}; hooks = hooks || {};
   const say = s => hooks.onStage && hooks.onStage(s);
   const prog = v => hooks.onProgress && hooks.onProgress(Math.max(0, Math.min(1, v)));
-  const stop = () => hooks.shouldStop && hooks.shouldStop();
+  const phase = p => hooks.onPhase && hooks.onPhase(p);
+  const stopped = () => !!(hooks.shouldStop && hooks.shouldStop());
+  const abortIf = () => { if (stopped()) throw new Cancelled(); };
 
   const fps = opts.fps || project.fps || 30;
   const total = N.duration(project);
   if (total <= 0) throw new Error('The timeline is empty — add a clip first.');
 
-  // h.264 needs even dimensions
   const W = Math.max(2, Math.round(project.width /2)*2);
   const H = Math.max(2, Math.round(project.height/2)*2);
   const frameCount = Math.max(1, Math.round(total * fps));
 
+  phase('audio');
   say('Mixing the audio…');
   const audio = await mixdown(project, total);
+  abortIf();
   prog(0.04);
 
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d', { alpha:false });
 
-  const useCodecs = webCodecsAvailable() && opts.encoder !== 'ffmpeg';
-  let videoName = null;
+  /* --- pick an encoder, and verify it before committing to it --- */
+  let useCodecs = webCodecsAvailable() && opts.encoder !== 'ffmpeg';
+  const encCfg = {
+    codec: opts.codec || 'avc1.42001f',
+    width: W, height: H,
+    bitrate: opts.bitrate || Math.round(W*H*fps*0.09),
+    framerate: fps,
+    avc: { format: 'annexb' },
+  };
+  if (useCodecs){
+    // asking first turns "the whole export dies" into "quietly use ffmpeg"
+    try {
+      const sup = await root.VideoEncoder.isConfigSupported(encCfg);
+      if (!sup || !sup.supported) useCodecs = false;
+    } catch(_){ useCodecs = false; }
+    if (!useCodecs) say('This browser cannot encode H.264 directly — using ffmpeg instead.');
+  }
+
   const inputs = [];
+  let framesWritten = 0;
+  let uiAt = 0;
+  const tick = async (i, label) => {
+    const now = performance.now();
+    if (now - uiAt < 90 && i !== frameCount - 1) return;
+    uiAt = now;
+    prog(0.04 + 0.80 * (i+1)/frameCount);
+    say(label + ' ' + (i+1) + ' of ' + frameCount + '…');
+    await idle();                       // one yield per ~90ms keeps cancel responsive
+  };
+
+  phase('encode');
 
   if (useCodecs){
-    say('Encoding video (hardware path)…');
+    say('Encoding video…');
     const chunks = [];
     let encErr = null;
     const encoder = new root.VideoEncoder({
@@ -281,85 +383,106 @@ async function exportProject(project, opts, hooks){
       },
       error: e => { encErr = e; },
     });
-    encoder.configure({
-      codec: opts.codec || 'avc1.42001f',            // H.264 baseline, widely decodable
-      width: W, height: H,
-      bitrate: opts.bitrate || Math.round(W*H*fps*0.09),
-      framerate: fps,
-      avc: { format: 'annexb' },                     // a raw stream ffmpeg can mux directly
-    });
+    encoder.configure(encCfg);
 
-    for (let i = 0; i < frameCount; i++){
-      if (stop()) { try { encoder.close(); } catch(_){} throw new Error('Export cancelled.'); }
-      if (encErr) throw new Error('Video encoder failed: ' + encErr.message);
-      await renderFrame(ctx, project, i / fps, true);
-      const frame = new root.VideoFrame(canvas, {
-        timestamp: Math.round(i * 1e6 / fps),
-        duration: Math.round(1e6 / fps),
-      });
-      encoder.encode(frame, { keyFrame: i % Math.round(fps * 2) === 0 });
-      frame.close();
-      if (encoder.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 0));
-      if (i % 5 === 0){ prog(0.04 + 0.80 * (i+1)/frameCount); say('Encoding frame ' + (i+1) + ' of ' + frameCount + '…'); await idle(); }
+    try {
+      const gop = Math.max(1, Math.round(fps * 2));
+      for (let i = 0; i < frameCount; i++){
+        abortIf();
+        if (encErr) throw new Error('Video encoder failed: ' + encErr.message);
+        await renderFrame(ctx, project, i / fps, true);
+
+        let frame;
+        try {
+          frame = new root.VideoFrame(canvas, {
+            timestamp: Math.round(i * 1e6 / fps),
+            duration: Math.round(1e6 / fps),
+          });
+        } catch(e){ throw new Error('Could not capture frame ' + (i+1) + ': ' + e.message); }
+
+        encoder.encode(frame, { keyFrame: i % gop === 0 });
+        frame.close();
+
+        // real backpressure: a single yield let the queue grow without bound,
+        // which on a slow encoder ate memory until the tab died
+        while (encoder.encodeQueueSize > 8 && !encErr){
+          abortIf();
+          await new Promise(r => setTimeout(r, 4));
+        }
+        await tick(i, 'Encoding frame');
+      }
+      await encoder.flush();
+    } finally {
+      try { encoder.close(); } catch(_){}
     }
-    await encoder.flush();
-    encoder.close();
     if (encErr) throw new Error('Video encoder failed: ' + encErr.message);
 
-    let len = 0;
-    for (const c of chunks) len += c.length;
-    const h264 = new Uint8Array(len);
-    let at = 0;
-    for (const c of chunks){ h264.set(c, at); at += c.length; }
-    videoName = 'v.h264';
-    inputs.push({ name: videoName, data: h264 });
+    // hand ffmpeg a Blob rather than one big concatenated array: the browser can
+    // back it with disk, and it halves peak memory on long timelines
+    inputs.push({ name:'v.h264', data: new Blob(chunks, { type:'application/octet-stream' }) });
 
   } else {
     say('Rendering frames…');
     const ff = await C.FF.load({ onStatus: say });
-    for (let i = 0; i < frameCount; i++){
-      if (stop()) throw new Error('Export cancelled.');
-      await renderFrame(ctx, project, i / fps, true);
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92));
-      const name = 'f' + String(i+1).padStart(6,'0') + '.jpg';
-      await ff.writeFile(name, new Uint8Array(await blob.arrayBuffer()));
-      if (i % 5 === 0){ prog(0.04 + 0.80 * (i+1)/frameCount); say('Rendering frame ' + (i+1) + ' of ' + frameCount + '…'); await idle(); }
+    try {
+      for (let i = 0; i < frameCount; i++){
+        abortIf();
+        await renderFrame(ctx, project, i / fps, true);
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.92));
+        await ff.writeFile('f' + String(i+1).padStart(6,'0') + '.jpg',
+                           new Uint8Array(await blob.arrayBuffer()));
+        framesWritten = i + 1;
+        await tick(i, 'Rendering frame');
+      }
+    } catch(e){
+      await purgeFrames(framesWritten);      // cancelling used to leave every frame behind
+      throw e;
     }
-    videoName = 'f%06d.jpg';
   }
 
+  abortIf();
+  phase('mux');
   say('Muxing into an MP4…');
   prog(0.86);
 
   if (audio) inputs.push({ name:'a.wav', data: audio.blob });
 
-  const args = useCodecs
-    ? ['-framerate', String(fps), '-i', 'v.h264']
-    : ['-framerate', String(fps), '-i', 'f%06d.jpg'];
+  const args = ['-framerate', String(fps), '-i', useCodecs ? 'v.h264' : 'f%06d.jpg'];
   if (audio) args.push('-i', 'a.wav');
   if (useCodecs) args.push('-c:v', 'copy');
-  else args.push('-c:v','libx264','-crf', String(opts.crf || 20), '-preset', opts.preset || 'veryfast', '-pix_fmt','yuv420p');
+  else args.push('-c:v','libx264','-crf', String(opts.crf || 20),
+                 '-preset', opts.preset || 'veryfast', '-pix_fmt','yuv420p');
   if (audio) args.push('-c:a','aac','-b:a','192k','-shortest');
   args.push('-movflags','+faststart','out.mp4');
 
-  const data = await C.FF.run(args, useCodecs ? inputs : (audio ? [{ name:'a.wav', data:audio.blob }] : []),
-                              'out.mp4', { onStatus: say, onProgress: v => prog(0.86 + v*0.13) });
-
-  // the JPEG path writes every frame into ffmpeg's in-memory filesystem, and
-  // FF.run only cleans up the inputs it was handed — clear them or a second
-  // export starts with the previous one still resident
-  if (!useCodecs){
-    const ff = await C.FF.load();
-    for (let i = 0; i < frameCount; i++){
-      try { await ff.deleteFile('f' + String(i+1).padStart(6,'0') + '.jpg'); } catch(_){}
-    }
+  let data;
+  try {
+    data = await C.FF.run(args,
+      useCodecs ? inputs : (audio ? [{ name:'a.wav', data:audio.blob }] : []),
+      'out.mp4', { onStatus: say, onProgress: v => prog(0.86 + v*0.13) });
+  } finally {
+    if (!useCodecs) await purgeFrames(framesWritten);
+    releasePool(project);
   }
+
   prog(1);
   return { blob: new Blob([data.buffer], { type:'video/mp4' }),
-           frames: frameCount, duration: total, hadAudio: !!audio, encoder: useCodecs ? 'webcodecs' : 'ffmpeg' };
+           frames: frameCount, duration: total, hadAudio: !!audio,
+           encoder: useCodecs ? 'webcodecs' : 'ffmpeg' };
+
+  /** ffmpeg's filesystem is in memory and survives between runs — clear it. */
+  async function purgeFrames(n){
+    if (!n) return;
+    try {
+      const ff = await C.FF.load();
+      for (let i = 0; i < n; i++){
+        try { await ff.deleteFile('f' + String(i+1).padStart(6,'0') + '.jpg'); } catch(_){}
+      }
+    } catch(_){}
+  }
 }
 
 root.NleRender = { importFile, mediaOf, renderFrame, mixdown, exportProject,
-                   webCodecsAvailable, filterString, kindOf };
+                   webCodecsAvailable, filterString, kindOf, seekSmart, releasePool };
 
 })(window);

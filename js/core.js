@@ -292,7 +292,17 @@ const FF = (function(){
     }
   }
 
-  return { load, run, threaded,
+  /** Kill the running engine. The only way to abort an ffmpeg command already
+   *  in flight — the next load() builds a fresh instance. */
+  function terminate(){
+    if (!instance) return false;
+    try { instance.terminate(); } catch(_){}
+    instance = null;
+    loading = null;
+    return true;
+  }
+
+  return { load, run, terminate, threaded,
            get usingCDN(){ return usingCDN; },
            get loaded(){ return !!instance; } };
 })();

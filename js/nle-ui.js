@@ -19,7 +19,7 @@ let playhead = 0;
 let playing = false;
 let rafId = 0;
 let playStartWall = 0, playStartT = 0;
-let exportBlob = null, cancelExport = false;
+let exportBlob = null, cancelExport = false, exportPhase = '', exportUrl = null;
 
 const pool = q('pool'), lanes = q('lanes'), ruler = q('ruler'),
       preview = q('preview'), props = q('props');
@@ -532,6 +532,7 @@ q('export').onclick = async () => {
   q('export').disabled = true;
 
   try {
+    const t0 = performance.now();
     const res = await R.exportProject(project, {
       fps: project.fps,
       encoder: q('encoder').value,
@@ -539,23 +540,42 @@ q('export').onclick = async () => {
     }, {
       onStage: s => q('exstat').textContent = s,
       onProgress: v => q('exprog').style.width = (v*100).toFixed(1) + '%',
+      onPhase: ph => { exportPhase = ph; },
       shouldStop: () => cancelExport,
     });
+    const secs = (performance.now() - t0) / 1000;
     exportBlob = res.blob;
     q('exportdone').classList.remove('hide');
     q('exmsg').innerHTML = '✅ Rendered <b>' + res.frames + '</b> frames (' + fmtT(res.duration) +
       ') — <b>' + fmtBytes(res.blob.size) + '</b>' +
       (res.hadAudio ? ' with audio' : ', silent') +
-      ' · encoder: <b>' + res.encoder + '</b>.';
-    q('exresult').src = URL.createObjectURL(res.blob);
+      ' · encoder: <b>' + res.encoder + '</b> · took <b>' + secs.toFixed(1) + 's</b> (' +
+      (res.frames / secs).toFixed(1) + ' fps).';
+    if (exportUrl) URL.revokeObjectURL(exportUrl);   // or every export leaks its predecessor
+    exportUrl = URL.createObjectURL(res.blob);
+    q('exresult').src = exportUrl;
   } catch(e){
     q('exstat').textContent = '';
-    note('Export failed: ' + e.message, 'err');
+    if (e && e.cancelled) note('Export cancelled.', '');
+    else note('Export failed: ' + e.message, 'err');
   } finally {
+    exportPhase = '';
     q('export').disabled = false;
+    q('excancel').disabled = false;
   }
 };
-q('excancel').onclick = () => { cancelExport = true; note('Cancelling…', ''); };
+q('excancel').onclick = () => {
+  cancelExport = true;
+  q('excancel').disabled = true;
+  // during muxing the work is inside ffmpeg, where a flag alone would sit doing
+  // nothing until it finished, so kill the engine outright
+  if (exportPhase === 'mux'){
+    note('Cancelling — stopping the encoder…', '');
+    C.FF.terminate();
+  } else {
+    note('Cancelling…', '');
+  }
+};
 q('exsave').onclick = () => download(exportBlob, 'timeline_export.mp4');
 q('exclose').onclick = () => q('exportbox').classList.add('hide');
 

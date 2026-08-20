@@ -97,6 +97,12 @@ trimming refuses to read past the end of the source or through a neighbour.
 Preview and export share one compositor. Preview lets the video elements run and paints
 whatever frame they are showing, which keeps playback smooth; export seeks every source to
 an exact time first, so the render is deterministic and does not depend on machine speed.
+Those seeks are the dominant cost of an export, so two things reduce them: every track is
+seeked in parallel rather than one after another, and `requestVideoFrameCallback` reports
+which source frame is actually on screen, letting a seek be skipped entirely when the
+element already shows the frame we want. Exporting a 15fps source at 30fps roughly halves
+the seeks; a 10fps source at 60fps does 45 instead of 240. Verified across six source/output
+fps combinations that skipping never changes the frame rendered.
 Audio is mixed separately through an `OfflineAudioContext` with real fade envelopes, then
 muxed in. Video encoding uses WebCodecs where the browser has it (H.264 straight out of the
 browser, muxed by ffmpeg with `-c:v copy`) and falls back to a JPEG sequence through ffmpeg
@@ -173,5 +179,7 @@ server.js         static server that sends COOP/COEP for multithreading
 - The built-in PDF fonts cover Latin only; other scripts become "?" and are reported.
 - Editor preview syncs video elements rather than seeking per frame, so it drifts slightly
   on very short clips. The export is frame-accurate regardless.
-- Editor export renders every frame through a canvas, so long timelines take a while.
+- Editor export renders every frame through a canvas, so long timelines take a while. Where
+  the source and timeline fps match, every frame still needs its own seek — decoding sources
+  sequentially with WebCodecs `VideoDecoder` would be the real fix and is not done yet.
 - No transitions between clips yet, and no keyframed animation.
