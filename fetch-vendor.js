@@ -17,11 +17,16 @@ const FILES = [
   ['ffmpeg@0.12.10/dist/umd/ffmpeg.js',            'ffmpeg.js'],
   ['ffmpeg@0.12.10/dist/umd/814.ffmpeg.js',        '814.ffmpeg.js'],
   ['util@0.12.1/dist/umd/index.js',                'ffmpeg-util.js'],
-  ['core@0.12.6/dist/umd/ffmpeg-core.js',          'ffmpeg-core.js'],
-  ['core@0.12.6/dist/umd/ffmpeg-core.wasm',        'ffmpeg-core.wasm'],
-  ['core-mt@0.12.6/dist/umd/ffmpeg-core.js',       'ffmpeg-core-mt.js'],
-  ['core-mt@0.12.6/dist/umd/ffmpeg-core.wasm',     'ffmpeg-core-mt.wasm'],
-  ['core-mt@0.12.6/dist/umd/ffmpeg-core.worker.js','ffmpeg-core-mt.worker.js'],
+  // The core MUST be the ESM build. ffmpeg.wasm 0.12 starts its class worker
+  // with {type:"module"}, where importScripts() does not exist, so the worker
+  // falls back to a dynamic import() and reads .default -- which only the ESM
+  // build provides. The UMD core loads as nothing and reports
+  // "failed to import ffmpeg-core.js".
+  ['core@0.12.6/dist/esm/ffmpeg-core.js',           'ffmpeg-core-esm.js'],
+  ['core@0.12.6/dist/esm/ffmpeg-core.wasm',         'ffmpeg-core.wasm'],
+  ['core-mt@0.12.6/dist/esm/ffmpeg-core.js',        'ffmpeg-core-mt-esm.js'],
+  ['core-mt@0.12.6/dist/esm/ffmpeg-core.wasm',      'ffmpeg-core-mt.wasm'],
+  ['core-mt@0.12.6/dist/esm/ffmpeg-core.worker.js', 'ffmpeg-core-mt-esm.worker.js'],
 ];
 
 function get(url, dest){

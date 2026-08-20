@@ -214,22 +214,29 @@ const FF = (function(){
     });
   }
 
+  /* The wrapper and the class worker are the UMD bundles -- they are loaded as a
+   * classic <script> and as the worker's own source. The CORE, however, must be
+   * the ESM build: ffmpeg.wasm starts that worker with {type:"module"}, where
+   * importScripts() does not exist, so the worker falls back to a dynamic
+   * import() and reads .default. Only the ESM core exports one. Handing it the
+   * UMD core leaves createFFmpegCore undefined and it reports
+   * "failed to import ffmpeg-core.js". */
   function srcFor(where, mt){
     const pkg = mt ? 'core-mt@0.12.6' : 'core@0.12.6';
     if (where === 'cdn') return {
       lib : CDN + 'ffmpeg@0.12.10/dist/umd/ffmpeg.js',
       util: CDN + 'util@0.12.1/dist/umd/index.js',
-      core: CDN + pkg + '/dist/umd/ffmpeg-core.js',
-      wasm: CDN + pkg + '/dist/umd/ffmpeg-core.wasm',
-      work: CDN + pkg + '/dist/umd/ffmpeg-core.worker.js',
+      core: CDN + pkg + '/dist/esm/ffmpeg-core.js',
+      wasm: CDN + pkg + '/dist/esm/ffmpeg-core.wasm',
+      work: CDN + pkg + '/dist/esm/ffmpeg-core.worker.js',
       cls : CDN + 'ffmpeg@0.12.10/dist/umd/814.ffmpeg.js',
     };
     return {
       lib : 'vendor/ffmpeg.js',
       util: 'vendor/ffmpeg-util.js',
-      core: mt ? 'vendor/ffmpeg-core-mt.js'   : 'vendor/ffmpeg-core.js',
-      wasm: mt ? 'vendor/ffmpeg-core-mt.wasm' : 'vendor/ffmpeg-core.wasm',
-      work: 'vendor/ffmpeg-core-mt.worker.js',
+      core: mt ? 'vendor/ffmpeg-core-mt-esm.js' : 'vendor/ffmpeg-core-esm.js',
+      wasm: mt ? 'vendor/ffmpeg-core-mt.wasm'   : 'vendor/ffmpeg-core.wasm',
+      work: 'vendor/ffmpeg-core-mt-esm.worker.js',
       cls : 'vendor/814.ffmpeg.js',
     };
   }
