@@ -38,3 +38,36 @@ document.addEventListener('click', e => {
 });
 
 })();
+
+/* ================= back to top =================
+ * Same behaviour as the landing page: it appears on the way down and steps
+ * aside on the way up, and holds still while the pointer is over it so it
+ * cannot vanish mid-click.
+ */
+(function () {
+  const toTop = document.getElementById('totop');
+  if (!toTop) return;
+  let lastY = window.scrollY, shown = false, over = false;
+
+  const set = on => {
+    if (on === shown) return;
+    shown = on;
+    toTop.classList.toggle('show', on);
+  };
+
+  window.addEventListener('scroll', () => {
+    const y = Math.max(0, window.scrollY);
+    if (y < 140){ lastY = y; if (!over) set(false); return; }
+    const dy = y - lastY;
+    if (Math.abs(dy) < 6) return;
+    lastY = y;
+    if (!over) set(dy > 0);
+  }, { passive:true });
+
+  toTop.addEventListener('pointerenter', () => { over = true; });
+  toTop.addEventListener('pointerleave', () => { over = false; });
+  toTop.addEventListener('click', () => {
+    window.scrollTo({ top:0, behavior:'smooth' });
+    set(false);
+  });
+})();

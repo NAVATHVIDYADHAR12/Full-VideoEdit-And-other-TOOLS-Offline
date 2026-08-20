@@ -305,7 +305,7 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .toolcard:hover .go{ color:var(--accent); gap:15px; }
 
 /* ================= footer ================= */
-.foot{ border-top:1px solid var(--line); padding:70px 0 56px; }
+.foot{ border-top:1px solid var(--line); padding:70px 0 clamp(84px,12vh,120px); }
 .footinner{ display:flex; justify-content:space-between; gap:34px; flex-wrap:wrap; align-items:flex-start; }
 .foot .brand{ font-family:var(--serif); font-size:22px; color:var(--text); }
 .foot .brand em{ font-style:italic; color:var(--accent); }
@@ -614,8 +614,12 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .footbottom{ display:flex; justify-content:space-between; align-items:flex-end;
   gap:26px; flex-wrap:wrap; }
 .footbottom .fine{ margin:0; }
+/* The floating chat and back-to-top buttons occupy the bottom right corner, so
+   the credit is pulled clear of them rather than sitting underneath. */
 .credit{
-  font-style:normal; text-align:right; display:flex; flex-direction:column; gap:5px;
+  font-style:normal; text-align:center; align-items:center;
+  display:flex; flex-direction:column; gap:5px;
+  margin-right:clamp(0px, 8vw, 96px);
   font-size:.78rem; line-height:1.5; color:var(--dim); letter-spacing:.02em;
 }
 .credit .who{ font-family:var(--serif); font-size:.98rem; color:var(--text);
@@ -625,5 +629,22 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .credit a:hover{ color:var(--accent); }
 @media (max-width:620px){
   .footbottom{ flex-direction:column; align-items:flex-start; }
-  .credit{ text-align:left; align-items:flex-start; }
+  .credit{ text-align:center; align-items:center; margin-right:0; }
+}
+
+/* ================= tool marks ================= */
+/* injected by icons.js, so the number shares the line with the mark */
+.ctop{ display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:22px; }
+.toolcard .ctop .num{ margin-bottom:0; }
+.ico{
+  width:44px; height:44px; flex:0 0 auto;
+  border:1px solid var(--line); color:var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  transition:border-color .4s ease, background .4s ease, color .4s ease;
+}
+.ico svg{ width:21px; height:21px; fill:none; stroke:currentColor;
+  stroke-width:1.25; stroke-linecap:round; stroke-linejoin:round; }
+.toolcard:hover .ico{
+  border-color:var(--accent); background:rgba(198,161,91,.07); color:var(--accent2);
 }
