@@ -12,7 +12,7 @@
   <!-- ============ home ============ -->
   <div id="home">
     <h1>Media &amp; Document <span>Toolkit</span></h1>
-    <p class="sub">Nine tools, one page. Everything runs on your own machine — no uploads, no accounts, no watermarks added.</p>
+    <p class="sub">Ten tools, one page. Everything runs on your own machine — no uploads, no accounts, no watermarks added.</p>
     <div class="tools">
       <button class="tool" data-go="frames">
         <span class="ic">🖼️</span><b>Video → JPG frames</b>
@@ -43,6 +43,11 @@
         <span class="ic">🎧</span><b>Noise cancellation</b>
         <small>Strip hiss, hum and background roar out of an audio file or a video's soundtrack.</small>
         <span class="tag fast">instant · offline</span>
+      </button>
+      <button class="tool" data-go="editor">
+        <span class="ic">&#127902;</span><b>Video editor</b>
+        <small>A real timeline: drag video, audio and images onto tracks, trim, split, add effects and text, then render an MP4.</small>
+        <span class="tag ff">timeline &middot; export</span>
       </button>
       <button class="tool" data-go="mergepdf">
         <span class="ic">📄</span><b>Merge anything into one PDF</b>
@@ -553,6 +558,104 @@
     </div>
   </div>
 
+  <!-- ============ 10. video editor ============ -->
+  <div id="panel-editor" class="panel hide">
+    <div class="crumb"><button data-back>← All tools</button>
+      <div><h2>Video editor</h2><p class="sub" style="margin:0">Timeline, tracks, clips, effects — rendered to an MP4.</p></div></div>
+
+    <div class="nletop">
+      <div class="nlecol">
+        <label>Media pool</label>
+        <div data-el="pick"></div>
+        <div class="hint" data-el="poolstat"></div>
+        <div class="pool" data-el="pool"></div>
+      </div>
+
+      <div class="nlecol nlepreview">
+        <label>Preview</label>
+        <div class="stage"><canvas data-el="preview" width="1280" height="720"></canvas></div>
+        <div class="transport">
+          <button class="ghost sm" data-el="prevf" title="Previous frame">&#9198;</button>
+          <button data-el="play" title="Play / pause (Space)">&#9654;</button>
+          <button class="ghost sm" data-el="stopb" title="Stop">&#9209;</button>
+          <button class="ghost sm" data-el="nextf" title="Next frame">&#9197;</button>
+          <span class="tc" data-el="time">0:00.00 / 0:00.00</span>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          <div><label>Resolution</label>
+            <select data-el="preset">
+              <option value="1280x720" selected>1280&times;720 &mdash; 720p</option>
+              <option value="1920x1080">1920&times;1080 &mdash; 1080p</option>
+              <option value="1080x1920">1080&times;1920 &mdash; vertical</option>
+              <option value="1080x1080">1080&times;1080 &mdash; square</option>
+              <option value="854x480">854&times;480 &mdash; small</option>
+            </select></div>
+          <div><label>Width</label><input type="number" data-el="pw" value="1280" min="16" step="2"></div>
+          <div><label>Height</label><input type="number" data-el="ph" value="720" min="16" step="2"></div>
+          <div><label>Frames per second</label><input type="number" data-el="pfps" value="30" min="1" max="120" step="1"></div>
+        </div>
+      </div>
+
+      <div class="nlecol nleprops">
+        <label>Clip properties</label>
+        <div class="props" data-el="props"></div>
+      </div>
+    </div>
+
+    <div class="nletools">
+      <button class="ghost sm" data-el="split" title="Split every clip at the playhead (S)">&#9986; Split</button>
+      <button class="ghost sm" data-el="del" title="Delete the selected clip (Del)">&#128465; Delete</button>
+      <button class="ghost sm" data-el="addtext">T Add text</button>
+      <span class="sep"></span>
+      <button class="ghost sm" data-el="addv">+ Video track</button>
+      <button class="ghost sm" data-el="adda">+ Audio track</button>
+      <button class="ghost sm" data-el="ripple" title="Close all gaps">&#8677; Close gaps</button>
+      <span class="sep"></span>
+      <button class="ghost sm" data-el="zout">&#128269;&minus;</button>
+      <button class="ghost sm" data-el="zfit">Fit</button>
+      <button class="ghost sm" data-el="zin">&#128269;+</button>
+      <span class="grow"></span>
+      <button data-el="export">&#11015; Export MP4</button>
+    </div>
+
+    <div class="tlwrap">
+      <div class="tlscroll" data-el="scroll">
+        <div class="tlinner">
+          <div class="ruler" data-el="ruler"></div>
+          <div class="lanes" data-el="lanes"></div>
+          <div class="phead" data-el="phead"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note hide" data-el="note"></div>
+
+    <div class="card hide" data-el="exportbox">
+      <div class="bar"><i data-el="exprog"></i></div>
+      <div class="status"><span data-el="exstat">Starting&hellip;</span>
+        <button class="ghost sm" data-el="excancel">Cancel</button></div>
+      <div class="grid" style="margin-top:12px">
+        <div><label>Encoder</label>
+          <select data-el="encoder">
+            <option value="auto" selected>Automatic &mdash; fastest available</option>
+            <option value="ffmpeg">Force ffmpeg (slower, most compatible)</option>
+          </select></div>
+        <div><label>Quality (ffmpeg path)</label>
+          <input type="number" data-el="crf" value="20" min="14" max="32" step="1">
+          <div class="hint">Lower is better quality</div></div>
+      </div>
+      <div class="hint" data-el="codecnote" style="margin-top:8px"></div>
+      <div class="hide" data-el="exportdone">
+        <div class="note ok" data-el="exmsg" style="margin-top:14px"></div>
+        <video data-el="exresult" controls style="margin-top:14px;max-height:300px"></video>
+        <div class="row" style="margin-top:14px">
+          <button data-el="exsave">&#11015; Download MP4</button>
+          <button class="ghost" data-el="exclose">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <script src="js/core.js"></script>
 <script src="js/zip.js"></script>
 <script src="js/docx.js"></script>
@@ -561,5 +664,8 @@
 <script src="js/tools.js"></script>
 <script src="js/docs.js"></script>
 <script src="js/doctools.js"></script>
+<script src="js/nle-model.js"></script>
+<script src="js/nle-render.js"></script>
+<script src="js/nle-ui.js"></script>
 </body>
 </html>

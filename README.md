@@ -1,6 +1,6 @@
 # Media & Document Toolkit
 
-Nine video, audio and document tools that run entirely on your own machine. No uploads, no accounts,
+Ten video, audio and document tools that run entirely on your own machine. No uploads, no accounts,
 no server round-trips — your files never leave the computer.
 
 ## Setup after cloning
@@ -58,6 +58,7 @@ CSS and JS; all decoding, processing and encoding happens in the visitor's own b
 | **Mute a video** | Strips the audio track. Video is stream-copied — lossless and near-instant. | ffmpeg |
 | **Merge audio into video** | New soundtrack, replacing or mixed with the original. Video stream-copied. | ffmpeg |
 | **Noise cancellation** | Removes hiss, hum and background roar from audio or a video's soundtrack. | pure JS |
+| **Video editor** | A timeline NLE: media pool, multiple video/audio tracks, drag-drop, trim, split, transforms, colour filters, text, fades — rendered to MP4. | WebCodecs + ffmpeg |
 | **Merge anything into one PDF** | Any number of PDFs, images, Word docs and text files, in your chosen order. | pure JS |
 | **Merge Word documents** | Joins .docx files, carrying over text, images, lists and numbering. | pure JS |
 | **Convert documents** | PDF → Word (two modes), PDF → images/text, Word → PDF, images → PDF. | pure JS |
@@ -86,6 +87,20 @@ loss**, stable across runs, around 40× realtime. It runs in a Web Worker so the
 
 **Mute** and **Merge** use `-c:v copy`, so the video is remuxed rather than re-encoded.
 That means zero quality loss and near-instant completion regardless of video length.
+
+**The video editor** keeps its timeline model (`js/nle-model.js`) free of DOM and media
+APIs, so the parts that actually break — overwrite placement, source-bounded trimming,
+splitting, cross-track rules — are unit-tested in Node rather than clicked at by hand.
+Dropping a clip over another trims, splits or removes the host the way an NLE should;
+trimming refuses to read past the end of the source or through a neighbour.
+
+Preview and export share one compositor. Preview lets the video elements run and paints
+whatever frame they are showing, which keeps playback smooth; export seeks every source to
+an exact time first, so the render is deterministic and does not depend on machine speed.
+Audio is mixed separately through an `OfflineAudioContext` with real fade envelopes, then
+muxed in. Video encoding uses WebCodecs where the browser has it (H.264 straight out of the
+browser, muxed by ffmpeg with `-c:v copy`) and falls back to a JPEG sequence through ffmpeg
+otherwise — same result, slower.
 
 **PDF to Word** comes in two modes because there is a genuine trade-off:
 
@@ -135,6 +150,9 @@ js/zip.js         ZIP read/write (DOCX is a ZIP), via CompressionStream
 js/docx.js        build / read / merge Word documents, no dependencies
 js/docs.js        PDF layout engine, PDF text reconstruction, page rendering
 js/doctools.js    the three document tool controllers
+js/nle-model.js   timeline data model — pure logic, unit-tested
+js/nle-render.js  media import, frame compositing, audio mixdown, export
+js/nle-ui.js      the editor interface
 js/dsp.js         FFT + spectral subtraction (dependency-free, unit-testable)
 js/wm.js          watermark box editor + canvas removal + ffmpeg filter generation
 js/tools.js       the six media tool controllers
@@ -153,3 +171,7 @@ server.js         static server that sends COOP/COEP for multithreading
 - PDF → Word cannot recover vector drawings or text boxes; scanned PDFs need OCR.
 - PowerPoint and legacy .doc are not supported at all.
 - The built-in PDF fonts cover Latin only; other scripts become "?" and are reported.
+- Editor preview syncs video elements rather than seeking per frame, so it drifts slightly
+  on very short clips. The export is frame-accurate regardless.
+- Editor export renders every frame through a canvas, so long timelines take a while.
+- No transitions between clips yet, and no keyframed animation.
