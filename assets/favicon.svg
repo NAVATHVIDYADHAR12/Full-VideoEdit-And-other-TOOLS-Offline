@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Atelier Studio">
+  <defs>
+    <linearGradient id="disc" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#4A3419"/>
+      <stop offset="0.55" stop-color="#2A1D0E"/>
+      <stop offset="1" stop-color="#150E06"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E9D397"/>
+      <stop offset="0.5" stop-color="#C6A15B"/>
+      <stop offset="1" stop-color="#A8813F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- warm brown disc -->
+  <circle cx="32" cy="32" r="32" fill="url(#disc)"/>
+
+  <!-- a single fine champagne ring, set in from the edge -->
+  <circle cx="32" cy="32" r="29" fill="none" stroke="url(#gold)" stroke-width="1.5" opacity="0.9"/>
+
+  <!-- V / A monogram. Instrument Serif cannot load inside an icon, so the stack
+       falls through to a high-contrast system serif of the same character. -->
+  <g fill="url(#gold)" font-family="'Instrument Serif',Georgia,'Times New Roman',serif" font-size="30">
+    <text x="19.5" y="32" text-anchor="middle" dominant-baseline="central">V</text>
+    <text x="44.5" y="32" text-anchor="middle" dominant-baseline="central">A</text>
+  </g>
+  <line x1="35.4" y1="45" x2="28.6" y2="19" stroke="url(#gold)" stroke-width="1.7"
+        stroke-linecap="round" opacity="0.75"/>
+</svg>
