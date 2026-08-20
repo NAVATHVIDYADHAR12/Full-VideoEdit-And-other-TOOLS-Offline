@@ -478,8 +478,9 @@
 [data-reveal].in [data-stage],
 [data-reveal].in[data-stage]{ opacity:1; transform:none; }
 [data-stage="1"]{ transition-delay:0ms }
-[data-stage="2"]{ transition-delay:170ms }
-[data-stage="3"]{ transition-delay:340ms }
+[data-stage="2"]{ transition-delay:150ms }
+[data-stage="3"]{ transition-delay:300ms }
+[data-stage="4"]{ transition-delay:450ms }
 
 /* images settle in rather than slide, so they read as a different gesture */
 .shot.pop{
@@ -488,7 +489,7 @@
              transform .95s cubic-bezier(.22,.61,.36,1),
              filter .95s cubic-bezier(.22,.61,.36,1),
              border-color .5s ease, box-shadow .5s ease;
-  transition-delay:340ms;
+  transition-delay:450ms;
 }
 [data-reveal].in .shot.pop{ opacity:1; transform:none; filter:blur(0); }
 
@@ -511,4 +512,63 @@
   .chatfab::after{ animation:none }
   [data-stage],.shot.pop{ opacity:1 !important; transform:none !important;
     filter:none !important; transition:none !important; }
+}
+
+/* ================= the collection page ================= */
+.collection-page{ background:var(--bg); }
+.collection{ padding:clamp(120px,16vh,180px) 0 0; }
+.colhead{ max-width:820px; margin-bottom:clamp(56px,8vh,96px); }
+.colhead .display{ font-size:clamp(2.6rem,6vw,4.8rem); margin-top:4px; }
+.colhead .lede{ margin-top:24px; }
+.colfoot{
+  border-top:1px solid var(--line); margin-top:clamp(48px,7vh,80px);
+  padding:34px 0 clamp(70px,10vh,110px);
+  color:var(--dim); font-size:.9rem; font-weight:300; letter-spacing:.01em;
+}
+.colfoot b{ color:var(--text); font-weight:500; }
+
+/* the back link reads as a quiet counterpart to the gold call to action */
+.ghostcta{
+  background:transparent !important; border:1px solid var(--line) !important;
+  color:var(--dim) !important; text-decoration:none;
+  display:inline-flex; align-items:center;
+  transition:border-color .35s ease, color .35s ease;
+}
+.ghostcta:hover{ border-color:var(--accent) !important; color:var(--accent) !important; }
+
+/* cards are anchors here, not buttons */
+.collection .toolcard{ text-decoration:none; }
+
+/* ---------- the deal-out ---------- */
+/* each card and each header line waits its turn, set from script */
+.collection [data-intro],
+.collection .toolcard{
+  opacity:0; transform:translateY(20px);
+  transition:opacity .75s cubic-bezier(.22,.61,.36,1),
+             transform .75s cubic-bezier(.22,.61,.36,1),
+             background .4s ease;
+}
+.collection .toolcard{ transform:translateY(24px) scale(.985); }
+.collection [data-intro].in,
+.collection .toolcard.in{ opacity:1; transform:none; }
+
+/* a hairline sweeps the top edge as a card lands */
+.collection .toolcard::after{
+  content:''; position:absolute; top:0; left:0; right:100%; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  opacity:.7; transition:right .9s cubic-bezier(.22,.61,.36,1) .12s;
+}
+.collection .toolcard.in::after{ right:0; }
+
+@media (prefers-reduced-motion:reduce){
+  .collection [data-intro],
+  .collection .toolcard{ opacity:1 !important; transform:none !important; transition:none !important; }
+  .collection .toolcard::after{ display:none; }
+}
+
+/* the collection link should survive on a phone, where .navcta hides itself */
+@media (max-width:820px){
+  .navcta{ display:inline-flex !important; padding:8px 13px !important;
+    font-size:11px !important; letter-spacing:.05em; }
+  .nav .brand{ font-size:16px; }
 }
