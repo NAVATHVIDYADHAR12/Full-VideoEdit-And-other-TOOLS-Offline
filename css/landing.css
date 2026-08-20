@@ -676,3 +676,25 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
   .colhead .display::after{ width:min(360px,62%); transition:none; }
   .colhead .display::before{ transform:translateX(-50%) rotate(45deg) scale(1); transition:none; }
 }
+
+/* ================= reserved slots ================= */
+/* Held space, not a disabled control: nothing to click, nothing to focus, and
+   none of the hover treatment the real cards get. A dashed inset says the room
+   is set aside rather than broken. */
+.toolcard.soon{ cursor:default; }
+.toolcard.soon::before{
+  content:''; position:absolute; inset:14px; pointer-events:none;
+  border:1px dashed var(--line); opacity:.6;
+}
+.toolcard.soon::after{ display:none; }          /* no arrival sweep */
+.toolcard.soon:hover{ background:var(--bg); box-shadow:none; z-index:auto; }
+
+.toolcard.soon .ico{ border-style:dashed; color:var(--dim); opacity:.75; }
+.toolcard.soon:hover .ico{ border-color:var(--line); background:transparent;
+  color:var(--dim); }
+.toolcard.soon .num{ color:var(--dim); opacity:.55; }
+.toolcard.soon b{ color:var(--dim); }
+.toolcard.soon:hover b{ color:var(--dim); }
+.toolcard.soon small{ opacity:.62; }
+.toolcard.soon .go{ color:var(--dim); opacity:.7; }
+.toolcard.soon:hover .go{ color:var(--dim); gap:9px; }
