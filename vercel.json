@@ -1,32 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "comment": "This is a plain static site — no framework, no build step, no server. Everything runs in the visitor's browser. These three fields stop Vercel from auto-detecting a framework and then failing because it cannot find one.",
   "framework": null,
   "buildCommand": null,
   "installCommand": null,
   "outputDirectory": ".",
-
   "headers": [
     {
-      "comment": "COOP+COEP make the page cross-origin isolated, which is what unlocks SharedArrayBuffer and therefore MULTITHREADED ffmpeg.wasm. Without these two headers the app still works, but ffmpeg falls back to the single-threaded core and video jobs run several times slower.",
       "source": "/(.*)",
       "headers": [
-        { "key": "Cross-Origin-Opener-Policy",   "value": "same-origin" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" },
         { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" }
       ]
     },
     {
-      "comment": "The ffmpeg engine is content-addressed by version in its URL, so it can be cached forever.",
       "source": "/vendor/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     },
     {
-      "comment": "App code is small; revalidate so deploys take effect immediately.",
-      "source": "/(css|js)/(.*)",
+      "source": "/(css|js|lib)/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]

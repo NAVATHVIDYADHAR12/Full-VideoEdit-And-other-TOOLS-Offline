@@ -40,6 +40,12 @@ The app is fully static, so it deploys as-is:
 That is what unlocks `SharedArrayBuffer`, and therefore **multithreaded** ffmpeg. Without
 those headers everything still works, just single-threaded and slower.
 
+`framework`, `buildCommand` and `installCommand` are pinned to `null` so Vercel does not
+try to auto-detect a framework and then fail looking for one. Note that `vercel.json` is
+validated against a strict schema and rejects any property it does not recognise — including
+a `comment` field — and JSON has no comment syntax, so anything explanatory has to live here
+rather than in the file.
+
 `vendor/` is excluded from the deployment via `.vercelignore`, so the hosted app loads the
 ffmpeg engine from a CDN. That combination is safe here because both unpkg and jsDelivr send
 `Cross-Origin-Resource-Policy: cross-origin`, which is exactly what `require-corp` demands —
