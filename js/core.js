@@ -176,23 +176,104 @@ function makePicker(container, opt){
 }
 
 /* ================= ffmpeg.wasm loader =================
- * Prefers the vendored copy (offline) when served over http, falls back to the
- * CDN on file:// where fetching local .wasm is blocked by the browser. */
+ * Tries every sensible way to start the engine rather than betting on one.
+ * A single failure used to be fatal: if the multithreaded core would not start,
+ * or the vendored copy was half-present, the whole thing gave up instead of
+ * falling back to something that works. */
 const FF = (function(){
-  let instance = null, loading = null, usingCDN = false;
+  let instance = null, loading = null, usingCDN = false, usingMT = false;
   const isFile = location.protocol === 'file:';
   const CDN = 'https://unpkg.com/@ffmpeg/';
 
   const threaded = () => (typeof SharedArrayBuffer !== 'undefined') && self.crossOriginIsolated === true;
 
+  /** Anything at all can be thrown or rejected — always produce something readable.
+   *  This is why the old message said "undefined": it assumed an Error. */
+  function errText(e){
+    if (e == null) return 'no reason given';
+    if (typeof e === 'string') return e;
+    if (e.message) return e.message;
+    if (e.reason) return errText(e.reason);
+    if (e.statusText) return e.statusText;
+    if (e.type) return 'a "' + e.type + '" event with no detail';
+    try {
+      const s = String(e);
+      if (s && s !== '[object Object]') return s;
+    } catch(_){}
+    return 'no reason given';
+  }
+
   function loadScript(src){
     return new Promise((res, rej) => {
       if ([...document.scripts].some(s => s.src === src || s.src.endsWith(src))) return res();
       const s = document.createElement('script');
-      s.src = src; s.onload = res;
-      s.onerror = () => rej(new Error('Could not load ' + src));
+      s.src = src;
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('could not fetch ' + src));
       document.head.appendChild(s);
     });
+  }
+
+  function srcFor(where, mt){
+    const pkg = mt ? 'core-mt@0.12.6' : 'core@0.12.6';
+    if (where === 'cdn') return {
+      lib : CDN + 'ffmpeg@0.12.10/dist/umd/ffmpeg.js',
+      util: CDN + 'util@0.12.1/dist/umd/index.js',
+      core: CDN + pkg + '/dist/umd/ffmpeg-core.js',
+      wasm: CDN + pkg + '/dist/umd/ffmpeg-core.wasm',
+      work: CDN + pkg + '/dist/umd/ffmpeg-core.worker.js',
+      cls : CDN + 'ffmpeg@0.12.10/dist/umd/814.ffmpeg.js',
+    };
+    return {
+      lib : 'vendor/ffmpeg.js',
+      util: 'vendor/ffmpeg-util.js',
+      core: mt ? 'vendor/ffmpeg-core-mt.js'   : 'vendor/ffmpeg-core.js',
+      wasm: mt ? 'vendor/ffmpeg-core-mt.wasm' : 'vendor/ffmpeg-core.wasm',
+      work: 'vendor/ffmpeg-core-mt.worker.js',
+      cls : 'vendor/814.ffmpeg.js',
+    };
+  }
+
+  /** Is the vendored engine actually sitting there? file:// cannot fetch it at all. */
+  async function vendorPresent(mt){
+    if (isFile) return false;
+    try {
+      const r = await fetch(srcFor('local', mt).wasm, { method:'HEAD' });
+      return r.ok;
+    } catch(_){ return false; }
+  }
+
+  async function attempt(where, mt, hooks, say){
+    const src = srcFor(where, mt);
+    say('Starting ffmpeg — ' + (mt ? 'multithreaded' : 'single-threaded') +
+        ', ' + (where === 'cdn' ? 'from the CDN' : 'offline copy') + '…');
+
+    await loadScript(src.lib);
+    await loadScript(src.util);
+    if (!self.FFmpegWASM || !self.FFmpegWASM.FFmpeg)
+      throw new Error('the ffmpeg wrapper loaded but did not register itself');
+    if (!self.FFmpegUtil || !self.FFmpegUtil.toBlobURL)
+      throw new Error('the ffmpeg helpers loaded but did not register themselves');
+
+    const { FFmpeg } = self.FFmpegWASM;
+    const { toBlobURL } = self.FFmpegUtil;
+
+    say('Fetching the engine (~32 MB, cached after the first time)…');
+    const cfg = {
+      coreURL: await toBlobURL(src.core, 'text/javascript'),
+      wasmURL: await toBlobURL(src.wasm, 'application/wasm'),
+      classWorkerURL: await toBlobURL(src.cls, 'text/javascript'),
+    };
+    if (mt) cfg.workerURL = await toBlobURL(src.work, 'text/javascript');
+
+    const ff = new FFmpeg();
+    if (hooks.onLog) ff.on('log', ({ message }) => hooks.onLog(message));
+    say('Warming up…');
+    await ff.load(cfg);
+
+    usingCDN = where === 'cdn';
+    usingMT = mt;
+    return ff;
   }
 
   /** @returns {Promise<FFmpeg>} */
@@ -203,69 +284,43 @@ const FF = (function(){
 
     loading = (async () => {
       const say = m => hooks.onStatus && hooks.onStatus(m);
-      const mt  = threaded();
+      const mt = threaded();
 
-      const corePkg = mt ? 'core-mt@0.12.6' : 'core@0.12.6';
-      const cdnSrc = {
-        lib : CDN + 'ffmpeg@0.12.10/dist/umd/ffmpeg.js',
-        util: CDN + 'util@0.12.1/dist/umd/index.js',
-        core: CDN + corePkg + '/dist/umd/ffmpeg-core.js',
-        wasm: CDN + corePkg + '/dist/umd/ffmpeg-core.wasm',
-        work: CDN + corePkg + '/dist/umd/ffmpeg-core.worker.js',
-        cls : CDN + 'ffmpeg@0.12.10/dist/umd/814.ffmpeg.js',
-      };
-      const localSrc = {
-        lib : 'vendor/ffmpeg.js',
-        util: 'vendor/ffmpeg-util.js',
-        core: mt ? 'vendor/ffmpeg-core-mt.js'   : 'vendor/ffmpeg-core.js',
-        wasm: mt ? 'vendor/ffmpeg-core-mt.wasm' : 'vendor/ffmpeg-core.wasm',
-        work: 'vendor/ffmpeg-core-mt.worker.js',
-        cls : 'vendor/814.ffmpeg.js',
-      };
+      const localMT = mt ? await vendorPresent(true) : false;
+      const localST = await vendorPresent(false);
 
-      // On file:// the local .wasm cannot be fetched at all, so go straight to the CDN.
-      // Otherwise prefer the vendored copy but fall back if it was never downloaded.
-      let src = isFile ? cdnSrc : localSrc;
-      if (!isFile){
+      // Best first, then progressively safer. The single-threaded core has no
+      // worker plumbing to go wrong, so it is the reliable last resort.
+      const plans = [];
+      if (localMT) plans.push(['local', true]);
+      if (localST) plans.push(['local', false]);
+      if (mt)      plans.push(['cdn', true]);
+      plans.push(['cdn', false]);
+
+      const failures = [];
+      for (const [where, m] of plans){
         try {
-          const probe = await fetch(localSrc.wasm, { method:'HEAD' });
-          if (!probe.ok) throw new Error('not vendored');
-        } catch(_){
-          say('No local engine found — using the CDN (run "node fetch-vendor.js" to work offline)…');
-          src = cdnSrc;
+          const ff = await attempt(where, m, hooks, say);
+          instance = ff;
+          say('ffmpeg ready — ' + (m ? 'multithreaded' : 'single-threaded') +
+              (where === 'cdn' ? ', from the CDN' : ', offline copy'));
+          return ff;
+        } catch(e){
+          failures.push((where === 'cdn' ? 'CDN' : 'local') + ' / ' +
+                        (m ? 'multithreaded' : 'single-threaded') + ' — ' + errText(e));
+          say('That route failed, trying another…');
         }
       }
-      usingCDN = src === cdnSrc;
 
-      say('Loading ffmpeg' + (mt ? ' (multithreaded)' : '') + '…');
-      await loadScript(src.lib);
-      await loadScript(src.util);
+      const advice = isFile
+        ? 'You opened the file directly. Run start.bat instead — a file:// page cannot load the local engine, so everything has to come from the internet.'
+        : (localMT || localST)
+          ? 'The offline engine is present but would not start. Reloading the page usually clears this.'
+          : 'There is no offline engine here, so it must come from the internet. Check your connection, or run "node fetch-vendor.js" once to work offline afterwards.';
 
-      const { FFmpeg }   = self.FFmpegWASM;
-      const { toBlobURL } = self.FFmpegUtil;
-
-      say('Fetching the ffmpeg engine (~32 MB, first time only)…');
-      const cfg = {
-        coreURL: await toBlobURL(src.core, 'text/javascript'),
-        wasmURL: await toBlobURL(src.wasm, 'application/wasm'),
-        classWorkerURL: await toBlobURL(src.cls, 'text/javascript'),
-      };
-      if (mt) cfg.workerURL = await toBlobURL(src.work, 'text/javascript');
-
-      const ff = new FFmpeg();
-      if (hooks.onLog) ff.on('log', ({ message }) => hooks.onLog(message));
-      say('Starting the engine…');
-      await ff.load(cfg);
-      instance = ff;
-      say('ffmpeg ready' + (mt ? ' — multithreaded' : ' — single-threaded'));
-      return ff;
-    })().catch(e => {
-      loading = null;
-      const hint = isFile
-        ? '\n\nTip: run start.bat instead of opening the file directly — that serves it locally and uses the offline copy.'
-        : '\n\nCheck your internet connection: the ffmpeg engine is being fetched from a CDN.';
-      throw new Error('ffmpeg failed to load: ' + e.message + hint);
-    });
+      throw new Error('ffmpeg could not start.\n\n' + advice +
+                      '\n\nEverything that was tried:\n  • ' + failures.join('\n  • '));
+    })().catch(e => { loading = null; throw e; });
 
     return loading;
   }
@@ -302,8 +357,9 @@ const FF = (function(){
     return true;
   }
 
-  return { load, run, terminate, threaded,
+  return { load, run, terminate, threaded, errText,
            get usingCDN(){ return usingCDN; },
+           get usingMT(){ return usingMT; },
            get loaded(){ return !!instance; } };
 })();
 
