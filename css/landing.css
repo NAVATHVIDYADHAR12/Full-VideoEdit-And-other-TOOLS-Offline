@@ -52,6 +52,24 @@
 }
 .navtoggle{ display:none; }
 
+/* The call to action is an anchor so it can open a new tab, and so middle-click
+   and ctrl-click behave properly. Anchors do not inherit the global <button>
+   styling, so the gold fill has to be restated here or it renders as bare text.
+   The ghost variant on the collection page keeps its !important overrides and
+   still wins. */
+a.navcta{
+  display:inline-flex; align-items:center; justify-content:center;
+  text-decoration:none; border:0; cursor:pointer;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#080808; transition:.18s;
+}
+a.navcta:hover{ filter:brightness(1.12); }
+a.navcta.ghostcta:hover{ filter:none; }
+
+/* same oversight on the hero's secondary action: an anchor arrives underlined */
+a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
+  text-decoration:none; }
+
 @media (max-width:820px){
   .nav{ gap:14px; padding:11px 12px 11px 16px; }
   .navlinks{ display:none; }
