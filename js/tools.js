@@ -8,20 +8,26 @@ const { el, fmtBytes, fmtTime, escapeHtml, baseName, download, makePicker,
         crc32, buildZip, seek, idle, VIDEO_RE } = C;
 
 /* ================= router ================= */
-const home = document.getElementById('home');
-const panels = [...document.querySelectorAll('.panel')];
-
-const wrapEl = document.querySelector('.wrap');
+const landing = document.getElementById('landing');
+const navEl   = document.getElementById('nav');
+const panels  = [...document.querySelectorAll('.panel')];
+const wrapEl  = document.querySelector('.wrap');
 
 function show(name){
-  home.classList.toggle('hide', !!name);
+  if (landing) landing.classList.toggle('hide', !!name);
+  if (wrapEl)  wrapEl.classList.toggle('hide', !name);
   panels.forEach(p => p.classList.toggle('hide', p.id !== 'panel-' + name));
   // the editor needs the wide container; a class beats relying on :has() support
   if (wrapEl) wrapEl.classList.toggle('wide', name === 'editor');
+  // inside a tool the nav is always a solid object, never transparent
+  if (navEl) navEl.classList.toggle('stuck', !!name);
   location.hash = name || '';
   window.scrollTo(0,0);
 }
-document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = e => {
+  e.preventDefault();          // footer links are anchors, not buttons
+  show(b.dataset.go);
+});
 document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => show(''));
 window.addEventListener('hashchange', () => {
   const h = location.hash.replace('#','');

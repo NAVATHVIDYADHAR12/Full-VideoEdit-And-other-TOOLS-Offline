@@ -54,6 +54,26 @@ verified against the live CDNs for all six engine files.
 Note that even when hosted, **no video ever reaches the server**. Vercel only serves the HTML,
 CSS and JS; all decoding, processing and encoding happens in the visitor's own browser.
 
+## The landing page
+
+`index.html` opens on a landing page rather than straight into the tool grid: a floating
+navigation bar, a hero whose background is a frame sequence scrubbed by scroll position,
+feature sections, and the ten tools below. Picking a tool swaps the landing page out for
+the tool shell in place — it is still a single page.
+
+The hero frames are real output from this app's own frame extractor (80 frames, 900×506,
+about 4 MB) so the page demonstrates the product by existing. They load progressively: the
+first frame paints immediately and the rest stream in behind it, and scrubbing falls back to
+the nearest loaded frame so the canvas is never blank.
+
+Fonts are self-hosted rather than pulled from Google. Google Fonts does send the CORP header
+that `require-corp` demands, so it would have worked — but an offline-first app whose
+typography collapses without a network is not really offline-first. Instrument Serif and
+Manrope come to 76 KB in total.
+
+Motion is deliberately restrained: reveals move 16px, the only looping animation is the
+scroll cue, and `prefers-reduced-motion` disables the pinned hero entirely.
+
 ## The tools
 
 | Tool | What it does | Engine |

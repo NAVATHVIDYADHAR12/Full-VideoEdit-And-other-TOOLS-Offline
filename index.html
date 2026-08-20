@@ -3,70 +3,304 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Media &amp; Document Toolkit</title>
+<title>Atelier Studio — Offline Video &amp; Document Tools</title>
+<meta name="description" content="A timeline video editor, watermark removal, frame extraction, audio work and document conversion. Ten tools that run entirely in your browser.">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/landing.css">
 </head>
 <body>
-<div class="wrap">
-
-  <!-- ============ home ============ -->
-  <div id="home">
-    <h1>Media &amp; Document <span>Toolkit</span></h1>
-    <p class="sub">Ten tools, one page. Everything runs on your own machine — no uploads, no accounts, no watermarks added.</p>
-    <div class="tools">
-      <button class="tool" data-go="frames">
-        <span class="ic">🖼️</span><b>Video → JPG frames</b>
-        <small>Pull every frame out as a numbered JPEG and download the lot as a ZIP. 30 fps by default.</small>
-        <span class="tag fast">instant · offline</span>
-      </button>
-      <button class="tool" data-go="wmvideo">
-        <span class="ic">🚫</span><b>Remove watermark from video</b>
-        <small>Box the logo or timestamp and get a clean video back out — inpaint, blur, pixelate or crop.</small>
-        <span class="tag ff">uses ffmpeg</span>
-      </button>
-      <button class="tool" data-go="extract">
-        <span class="ic">🎵</span><b>Extract audio from video</b>
-        <small>Save the soundtrack as WAV, MP3 or M4A — or copy the original stream untouched.</small>
-        <span class="tag fast">WAV is instant</span>
-      </button>
-      <button class="tool" data-go="mute">
-        <span class="ic">🔇</span><b>Mute a video</b>
-        <small>Strip the audio track out. Lossless and near-instant — the video is copied, never re-encoded.</small>
-        <span class="tag ff">uses ffmpeg</span>
-      </button>
-      <button class="tool" data-go="merge">
-        <span class="ic">🎬</span><b>Merge audio into video</b>
-        <small>Put a new soundtrack on a video — replace the original or mix the two together.</small>
-        <span class="tag ff">uses ffmpeg</span>
-      </button>
-      <button class="tool" data-go="denoise">
-        <span class="ic">🎧</span><b>Noise cancellation</b>
-        <small>Strip hiss, hum and background roar out of an audio file or a video's soundtrack.</small>
-        <span class="tag fast">instant · offline</span>
-      </button>
-      <button class="tool" data-go="editor">
-        <span class="ic">&#127902;</span><b>Video editor</b>
-        <small>A real timeline: drag video, audio and images onto tracks, trim, split, add effects and text, then render an MP4.</small>
-        <span class="tag ff">timeline &middot; export</span>
-      </button>
-      <button class="tool" data-go="mergepdf">
-        <span class="ic">📄</span><b>Merge anything into one PDF</b>
-        <small>Pick any number of PDFs, images, Word docs and text files — get back a single PDF in your chosen order.</small>
-        <span class="tag fast">instant · offline</span>
-      </button>
-      <button class="tool" data-go="mergeword">
-        <span class="ic">📝</span><b>Merge Word documents</b>
-        <small>Join several .docx files into one, keeping text, images, lists and styles.</small>
-        <span class="tag fast">instant · offline</span>
-      </button>
-      <button class="tool" data-go="convert">
-        <span class="ic">🔄</span><b>Convert documents</b>
-        <small>PDF → Word, PDF → images or text, Word → PDF, images → PDF.</small>
-        <span class="tag fast">instant · offline</span>
-      </button>
-    </div>
-    <div class="note info" style="margin-top:22px" id="envNote"></div>
+<!-- ============ floating navigation ============ -->
+<nav class="nav" id="nav">
+  <span class="dot" aria-hidden="true"></span>
+  <a class="brand" href="#hero" data-scroll>Atelier <em>Studio</em></a>
+  <button class="navtoggle" id="navtoggle" aria-label="Menu">Menu</button>
+  <div class="navlinks" id="navlinks">
+    <a href="#features" data-scroll>Capabilities</a>
+    <a href="#craft" data-scroll>Craft</a>
+    <a href="#tools" data-scroll>The Ten Tools</a>
   </div>
+  <button class="navcta" data-go="editor">Open Editor</button>
+</nav>
+
+<div id="landing">
+
+  <!-- ============ hero ============ -->
+  <section class="hero" id="hero">
+    <div class="herostage">
+      <canvas id="heroframes" aria-hidden="true"></canvas>
+
+      <div class="shell heroframe tl">
+        <span>Frame <b id="framecount">001</b> / 080</span>
+      </div>
+      <div class="shell heroframe br">
+        <span>Rendered locally &middot; nothing uploaded</span>
+      </div>
+
+      <div class="shell heroinner" id="heroinner">
+        <div class="herorule" aria-hidden="true"></div>
+        <h1 class="display">Your studio,<br>entirely <em>offline</em>.</h1>
+        <p class="lede">
+          A timeline editor, watermark removal, frame extraction, audio work and document
+          conversion &mdash; ten tools that run inside your browser. No account, no upload,
+          no server ever sees your footage.
+        </p>
+        <div class="heroactions">
+          <button class="btn-gold" data-go="editor">Open the editor</button>
+          <a class="btn-ghost" href="#tools" data-scroll>Browse the tools</a>
+        </div>
+      </div>
+
+      <div class="scrollcue" aria-hidden="true">
+        <span>Scroll</span>
+        <i></i>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ capabilities ============ -->
+  <section class="section" id="features">
+    <div class="shell">
+      <div class="sechead" data-reveal>
+        <p class="eyebrow">Capabilities</p>
+        <h2>Built for the work, <em>not the demo</em>.</h2>
+        <p>
+          Every tool here exists because it had a job to do. Each one processes your files
+          on your own machine, at full quality, and tells you plainly what it can and
+          cannot do.
+        </p>
+      </div>
+
+      <!-- 1 · editor -->
+      <div class="feature" data-reveal>
+        <div class="fcopy">
+          <span class="badge">Non-linear editor</span>
+          <h3>A real timeline, not a trimmer.</h3>
+          <p>
+            Drag video, audio and stills onto layered tracks. Trim by the edge, split at the
+            playhead, move clips between tracks, and watch the result compose live.
+          </p>
+          <ul class="facts">
+            <li><b>Overwrite editing</b> &mdash; dropping a clip splits what it lands on, exactly as an editor should</li>
+            <li><b>Per-clip control</b> &mdash; opacity, scale, position, rotation, speed, volume, fades</li>
+            <li><b>Frame-accurate export</b> &mdash; every source seeked to an exact time, so renders never depend on machine speed</li>
+          </ul>
+        </div>
+        <div class="shot" aria-hidden="true">
+          <div class="tldemo">
+            <div class="tlruler"><span>0:00</span><span>0:04</span><span>0:08</span><span>0:12</span><span>0:16</span></div>
+            <div class="tlrow">
+              <span class="lbl">V2</span>
+              <div class="cl" style="flex:2"><img src="assets/hero/f012.jpg" alt=""></div>
+              <div class="cl" style="flex:3"><img src="assets/hero/f041.jpg" alt=""></div>
+            </div>
+            <div class="tlrow">
+              <span class="lbl">V1</span>
+              <div class="cl" style="flex:3"><img src="assets/hero/f058.jpg" alt=""></div>
+              <div class="cl" style="flex:2"><img src="assets/hero/f074.jpg" alt=""></div>
+            </div>
+            <div class="tlrow">
+              <span class="lbl">A1</span>
+              <div class="cl aud" style="flex:5"></div>
+            </div>
+            <div class="play"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 · watermark -->
+      <div class="feature flip" data-reveal>
+        <div class="fcopy">
+          <span class="badge">Restoration</span>
+          <h3>Erase what should not be there.</h3>
+          <p>
+            Box the logo or the burned-in timestamp and choose how it goes: inpainted from the
+            surrounding pixels, blurred, pixelated, or cropped away entirely.
+          </p>
+          <ul class="facts">
+            <li><b>Inpainting</b> solves a Laplace fill across the hole &mdash; near-perfect over sky, blur and gradients</li>
+            <li><b>Honest about limits</b> &mdash; over fine texture it smudges, and the tool says so rather than pretending</li>
+            <li><b>Crop</b> removes the pixels outright when the background is too busy to fake</li>
+          </ul>
+        </div>
+        <div class="shot" aria-hidden="true">
+          <img src="assets/hero/f026.jpg" alt="">
+          <div class="wmdemo" data-label="Region" style="left:58%;top:64%;width:32%;height:22%"><i></i></div>
+        </div>
+      </div>
+
+      <!-- 3 · frames -->
+      <div class="feature" data-reveal>
+        <div class="fcopy">
+          <span class="badge rare">The original tool</span>
+          <h3>Every frame, exactly.</h3>
+          <p>
+            Pull a clip apart into numbered JPEGs at any frame rate and download the lot as a
+            single archive. The frames behind this page came out of it.
+          </p>
+          <ul class="facts">
+            <li><b>Any rate</b> &mdash; 30&nbsp;fps by default, or one frame every few seconds</li>
+            <li><b>Hand-written ZIP writer</b> &mdash; no library, verified against Windows' own archive reader</li>
+            <li><b>Watermark removal</b> can be baked into every frame as it is written</li>
+          </ul>
+        </div>
+        <div class="shot" aria-hidden="true">
+          <div class="strip">
+            <span><img src="assets/hero/f004.jpg" alt=""></span>
+            <span><img src="assets/hero/f019.jpg" alt=""></span>
+            <span><img src="assets/hero/f037.jpg" alt=""></span>
+            <span><img src="assets/hero/f052.jpg" alt=""></span>
+            <span><img src="assets/hero/f069.jpg" alt=""></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 · documents -->
+      <div class="feature flip" data-reveal>
+        <div class="fcopy">
+          <span class="badge">Documents</span>
+          <h3>Papers, handled with the same care.</h3>
+          <p>
+            Merge anything into one PDF, join Word files, or convert between them &mdash; with
+            structure preserved rather than flattened into a picture.
+          </p>
+          <ul class="facts">
+            <li><b>PDF to Word</b> rebuilds paragraphs, runs, pictures and column-aligned tables as real Word objects</li>
+            <li><b>Position kept</b> &mdash; the page size is copied and images are anchored to their original coordinates</li>
+            <li><b>Written against ECMA-376</b>, validated by the same package reader Word itself uses</li>
+          </ul>
+        </div>
+        <div class="shot" aria-hidden="true">
+          <div class="docdemo"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ craft ============ -->
+  <section class="section" id="craft">
+    <div class="shell">
+      <div class="sechead" data-reveal>
+        <p class="eyebrow">Craft</p>
+        <h2>Nothing leaves <em>your machine</em>.</h2>
+        <p>
+          Not a marketing line &mdash; an architectural fact. There is no upload endpoint in this
+          application. Decoding, processing and encoding all happen in your browser, which is
+          why it still works with the network unplugged.
+        </p>
+      </div>
+      <div class="stats" data-reveal>
+        <div><b>10</b><small>Tools</small></div>
+        <div><b>0</b><small>Bytes uploaded</small></div>
+        <div><b>13</b><small>Test suites</small></div>
+        <div><b>100%</b><small>Offline capable</small></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ tools ============ -->
+  <section class="section" id="tools">
+    <div class="shell">
+      <div class="sechead" data-reveal>
+        <p class="eyebrow">The collection</p>
+        <h2>Ten tools, <em>one page</em>.</h2>
+        <p>Pick one and it opens in place. Your files never move off the machine.</p>
+      </div>
+
+      <div class="toolgrid" data-reveal>
+        <button class="toolcard" data-go="editor">
+          <span class="num">01</span><b>Video editor</b>
+          <small>A timeline with layered video and audio tracks, trimming, splitting, effects and text &mdash; rendered to MP4.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="wmvideo">
+          <span class="num">02</span><b>Remove watermark</b>
+          <small>Box the logo or timestamp and get a clean video back. Inpaint, blur, pixelate or crop.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="frames">
+          <span class="num">03</span><b>Video to JPG frames</b>
+          <small>Every frame as a numbered JPEG, delivered as a ZIP. 30&nbsp;fps by default.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="extract">
+          <span class="num">04</span><b>Extract audio</b>
+          <small>Save a soundtrack as WAV, MP3 or M4A &mdash; or lift the original stream untouched.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="mute">
+          <span class="num">05</span><b>Mute a video</b>
+          <small>Strip the audio track. The picture is copied bit-for-bit, so there is no quality loss.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="merge">
+          <span class="num">06</span><b>Merge audio into video</b>
+          <small>Give a video a new soundtrack &mdash; replacing the original or mixed beneath it.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="denoise">
+          <span class="num">07</span><b>Noise cancellation</b>
+          <small>Spectral subtraction that removes hiss and hum from audio or a video's soundtrack.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="mergepdf">
+          <span class="num">08</span><b>Merge into one PDF</b>
+          <small>Any number of PDFs, images, Word files and text, combined in the order you choose.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="mergeword">
+          <span class="num">09</span><b>Merge Word documents</b>
+          <small>Join .docx files into one, carrying across images, lists and numbering.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+        <button class="toolcard" data-go="convert">
+          <span class="num">10</span><b>Convert documents</b>
+          <small>PDF to Word, PDF to images or text, Word to PDF, images to PDF.</small>
+          <span class="go">Open &rarr;</span>
+        </button>
+      </div>
+
+      <div class="note info" style="margin-top:34px" id="envNote"></div>
+    </div>
+  </section>
+
+  <!-- ============ footer ============ -->
+  <footer class="foot">
+    <div class="shell">
+      <div class="footinner">
+        <div>
+          <div class="brand">Atelier <em>Studio</em></div>
+          <p>Ten offline video, audio and document tools. Built to run on your own machine and to be honest about what it can do.</p>
+        </div>
+        <div class="cols">
+          <div>
+            <h4>Video</h4>
+            <a href="#" data-go="editor">Editor</a>
+            <a href="#" data-go="wmvideo">Watermark removal</a>
+            <a href="#" data-go="frames">Frame extraction</a>
+          </div>
+          <div>
+            <h4>Audio</h4>
+            <a href="#" data-go="extract">Extract</a>
+            <a href="#" data-go="merge">Merge</a>
+            <a href="#" data-go="denoise">Noise cancellation</a>
+          </div>
+          <div>
+            <h4>Documents</h4>
+            <a href="#" data-go="mergepdf">Merge to PDF</a>
+            <a href="#" data-go="mergeword">Merge Word</a>
+            <a href="#" data-go="convert">Convert</a>
+          </div>
+        </div>
+      </div>
+      <div class="rule"></div>
+      <p class="fine">Runs entirely in your browser. Your files are never uploaded.</p>
+    </div>
+  </footer>
+
+</div>
+
+
+<div class="wrap">
 
   <!-- ============ 1. frames ============ -->
   <div id="panel-frames" class="panel hide">
@@ -667,5 +901,6 @@
 <script src="js/nle-model.js"></script>
 <script src="js/nle-render.js"></script>
 <script src="js/nle-ui.js"></script>
+<script src="js/landing.js"></script>
 </body>
 </html>

@@ -80,7 +80,7 @@ async function makeThumb(m){
       await C.seek(m.el, Math.min(1, m.duration/2));
       drawFit(c, m.el, m.el.videoWidth, m.el.videoHeight);
     } else {
-      c.fillStyle = '#0e7490'; c.fillRect(0,0,160,90);
+      c.fillStyle = '#3A1118'; c.fillRect(0,0,160,90);
     }
     m.thumb = cv.toDataURL('image/jpeg', 0.7);
   } catch(_){ m.thumb = null; }

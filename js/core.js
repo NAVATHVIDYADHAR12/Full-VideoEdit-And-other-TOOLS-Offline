@@ -432,7 +432,7 @@ function drawWave(canvas, chan, duration, sel){
   const step = Math.max(1, Math.floor(chan.length / W));
   const mid = H/2;
   const grad = c.createLinearGradient(0,0,W,0);
-  grad.addColorStop(0,'#22d3ee'); grad.addColorStop(1,'#0891b2');
+  grad.addColorStop(0,'#E3C982'); grad.addColorStop(1,'#C6A15B');
   c.strokeStyle = grad; c.lineWidth = 1;
   c.beginPath();
   for (let x = 0; x < W; x++){

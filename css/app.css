@@ -1,20 +1,46 @@
+/* Self-hosted so the typography survives with no internet — the whole point
+   of this app is that it works offline. */
+@font-face{font-family:'Instrument Serif';font-weight:400;font-style:normal;font-display:swap;
+  src:url('../assets/fonts/instrument-serif-normal-400.woff2') format('woff2')}
+@font-face{font-family:'Instrument Serif';font-weight:400;font-style:italic;font-display:swap;
+  src:url('../assets/fonts/instrument-serif-italic-400.woff2') format('woff2')}
+@font-face{font-family:'Manrope';font-weight:300 800;font-style:normal;font-display:swap;
+  src:url('../assets/fonts/manrope-normal-300_800.woff2') format('woff2')}
+
+/* Obsidian / champagne palette.
+   Ratio matters more than the colours: roughly 85% obsidian and charcoal,
+   10% ivory text, 4% champagne gold, 1% burgundy. Gold everywhere stops
+   reading as luxury, so it is reserved for accents and single strokes. */
 :root{
-  --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#293040;
-  --text:#e6edf3; --dim:#8b98a9; --accent:#22d3ee; --accent2:#0891b2;
-  --ok:#3fb950; --warn:#d29922; --err:#f85149;
+  --bg:#080808;          /* obsidian black    */
+  --panel:#11100F;       /* royal charcoal    */
+  --panel2:#151311;      /* dark espresso     */
+  --line:#292621;        /* obsidian gray     */
+  --text:#F4EFE6;        /* warm ivory        */
+  --dim:#B8B0A3;         /* muted champagne   */
+  --accent:#C6A15B;      /* antique champagne gold */
+  --accent2:#E3C982;     /* pale gold         */
+  --burgundy:#3A1118;    /* used sparingly, by design */
+  --ok:#A8B79A;
+  --warn:#C6A15B;
+  --err:#C77B72;
+  --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+  --sans:'Manrope',ui-sans-serif,system-ui,'Segoe UI',Roboto,sans-serif;
 }
 *{box-sizing:border-box}
 body{
   margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;
-  padding:30px 20px 70px;
+  font:15px/1.6 var(--sans);
+  padding:0;                       /* the landing page is full-bleed */
+  -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:900px;margin:0 auto}
-h1{font-size:27px;margin:0 0 4px;letter-spacing:-.02em}
+.wrap{max-width:900px;margin:0 auto;padding:104px 20px 80px}
+.wrap.hide{display:none!important}
+h1{font-family:var(--serif);font-size:34px;font-weight:400;margin:0 0 4px;letter-spacing:-.01em}
 h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
 .sub{color:var(--dim);margin:0 0 24px;font-size:14px}
-h2{font-size:20px;margin:0 0 3px;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-size:26px;font-weight:400;margin:0 0 3px;letter-spacing:-.01em}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
 .hide{display:none!important}
 hr{border:0;border-top:1px solid var(--line);margin:18px 0}
@@ -33,8 +59,8 @@ hr{border:0;border-top:1px solid var(--line);margin:18px 0}
   display:inline-block;margin-top:10px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
   padding:3px 7px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);
 }
-.tag.fast{color:#7ee787;border-color:rgba(63,185,80,.4)}
-.tag.ff{color:#67e8f9;border-color:rgba(8,145,178,.55)}
+.tag.fast{color:#A8B79A;border-color:rgba(168,183,154,.4)}
+.tag.ff{color:#E3C982;border-color:rgba(198,161,91,.45)}
 
 .crumb{display:flex;align-items:center;gap:12px;margin-bottom:18px}
 .crumb button{background:var(--panel);border:1px solid var(--line);color:var(--dim);
@@ -66,7 +92,7 @@ input:disabled,select:disabled{opacity:.45}
 
 button{
   font:600 15px/1 inherit;padding:13px 22px;border-radius:10px;border:0;cursor:pointer;
-  background:linear-gradient(135deg,#22d3ee,#0891b2);color:#04252e;transition:.15s;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));color:#080808;transition:.18s;
 }
 button:hover:not(:disabled){filter:brightness(1.12)}
 button:disabled{opacity:.45;cursor:not-allowed}
@@ -86,11 +112,11 @@ button.sm{padding:8px 13px;font-size:13px}
 /* ---------- info blocks ---------- */
 .meta{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--dim);margin-top:12px}
 .meta b{color:var(--text);font-weight:600}
-.note{font-size:13px;padding:11px 13px;border-radius:9px;background:rgba(210,153,34,.12);
-  border:1px solid rgba(210,153,34,.35);color:#e8c46a}
-.note.err{background:rgba(248,81,73,.12);border-color:rgba(248,81,73,.4);color:#ff9d97}
-.note.ok{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.4);color:#7ee787}
-.note.info{background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.35);color:#a8c7ff}
+.note{font-size:13px;padding:11px 13px;border-radius:9px;background:rgba(198,161,91,.12);
+  border:1px solid rgba(198,161,91,.35);color:var(--dim)}
+.note.err{background:rgba(199,123,114,.12);border-color:rgba(199,123,114,.4);color:#D9938B}
+.note.ok{background:rgba(168,183,154,.12);border-color:rgba(168,183,154,.4);color:#A8B79A}
+.note.info{background:rgba(198,161,91,.1);border-color:rgba(198,161,91,.35);color:#D8CDBA}
 
 .bar{height:9px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:14px 0 8px}
 .bar>i{display:block;height:100%;width:0;
@@ -223,21 +249,21 @@ audio{width:100%;border:0}
 .lanebody{position:relative;height:62px;background:
   repeating-linear-gradient(90deg,transparent,transparent 59px,rgba(255,255,255,.03) 59px,rgba(255,255,255,.03) 60px)}
 .lane.audio .lanebody{height:46px}
-.lanebody.over{background-color:rgba(34,211,238,.10)}
+.lanebody.over{background-color:rgba(198,161,91,.10)}
 
 .clip{position:absolute;top:4px;bottom:4px;border-radius:7px;overflow:hidden;cursor:grab;
   background:#243049 center/cover no-repeat;border:1px solid #3a4a6b;box-shadow:0 1px 3px rgba(0,0,0,.4);touch-action:none}
 .clip.audio{background:linear-gradient(180deg,#3b2f6b,#2a2350);border-color:#5b4a9e}
 .clip.text{background:linear-gradient(180deg,#1f4d3d,#17382c);border-color:#2f7d63}
 .clip.image{border-color:#6b5a3a}
-.clip.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(34,211,238,.45)}
+.clip.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(198,161,91,.45)}
 .clip .clabel{position:absolute;left:8px;right:8px;bottom:4px;font-size:11px;font-weight:600;
   color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
 .clip .grip{position:absolute;top:0;bottom:0;width:9px;cursor:ew-resize;z-index:2}
 .clip .grip.l{left:0;border-left:3px solid rgba(255,255,255,.35)}
 .clip .grip.r{right:0;border-right:3px solid rgba(255,255,255,.35)}
-.clip .grip:hover{background:rgba(34,211,238,.4)}
+.clip .grip:hover{background:rgba(198,161,91,.4)}
 
 .phead{position:absolute;top:0;width:2px;background:var(--err);z-index:5;pointer-events:none}
 .phead::before{content:'';position:absolute;top:0;left:-5px;border-left:6px solid transparent;
