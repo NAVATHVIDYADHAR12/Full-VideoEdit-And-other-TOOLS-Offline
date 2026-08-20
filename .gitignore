@@ -12,3 +12,6 @@ desktop.ini
 
 node_modules/
 *.log
+
+# stray offsets from editing scripts
+.pdfblocks.*

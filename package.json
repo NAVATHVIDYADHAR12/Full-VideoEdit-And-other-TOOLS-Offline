@@ -1,13 +1,15 @@
 {
-  "name": "video-toolkit",
+  "name": "media-document-toolkit",
   "version": "1.0.0",
-  "description": "Video to JPGs & Watermark Removal Toolkit",
+  "description": "Ten offline video, audio and document tools: timeline video editor, watermark removal, frame extraction, audio extraction/mixing/denoising, PDF and Word conversion and merging. Everything runs in the browser.",
   "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "dev": "node server.js",
-    "start": "node server.js"
+    "setup": "node fetch-vendor.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "private": true
 }
