@@ -648,3 +648,31 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .toolcard:hover .ico{
   border-color:var(--accent); background:rgba(198,161,91,.07); color:var(--accent2);
 }
+
+
+/* ================= heading rule ================= */
+/* A hairline that draws itself outward from the centre as the heading lands,
+   with a single diamond set on it. Champagne, fading at both ends, so it reads
+   as a flourish rather than a border. */
+.colhead .display{ position:relative; padding-bottom:36px; }
+.colhead .display::after{
+  content:''; position:absolute; left:50%; bottom:12px;
+  transform:translateX(-50%);
+  width:0; height:1px;
+  background:linear-gradient(90deg, transparent, var(--accent) 22%,
+                             var(--accent2) 50%, var(--accent) 78%, transparent);
+  transition:width 1.15s cubic-bezier(.22,.61,.36,1) .28s;
+}
+.colhead .display.in::after{ width:min(360px, 62%); }
+.colhead .display::before{
+  content:''; position:absolute; left:50%; bottom:9.5px; z-index:1;
+  width:6px; height:6px; background:var(--accent2);
+  transform:translateX(-50%) rotate(45deg) scale(0);
+  transition:transform .7s cubic-bezier(.34,1.4,.64,1) .82s;
+}
+.colhead .display.in::before{ transform:translateX(-50%) rotate(45deg) scale(1); }
+
+@media (prefers-reduced-motion:reduce){
+  .colhead .display::after{ width:min(360px,62%); transition:none; }
+  .colhead .display::before{ transform:translateX(-50%) rotate(45deg) scale(1); transition:none; }
+}

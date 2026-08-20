@@ -46,22 +46,32 @@ document.addEventListener('click', e => {
  */
 (function () {
   const toTop = document.getElementById('totop');
-  if (!toTop) return;
-  let lastY = window.scrollY, shown = false, over = false;
+  const nav   = document.getElementById('nav');
+  if (!toTop && !nav) return;
+  let lastY = window.scrollY, shown = false, over = false, hidden = false;
 
   const set = on => {
-    if (on === shown) return;
+    if (on === shown || !toTop) return;
     shown = on;
     toTop.classList.toggle('show', on);
   };
+  const setNav = on => {
+    if (on === hidden || !nav) return;
+    hidden = on;
+    nav.classList.toggle('hidden', on);
+  };
 
+  // one handler for both: the bar steps aside on the way down and the return
+  // button takes its place, exactly as on the landing page
   window.addEventListener('scroll', () => {
     const y = Math.max(0, window.scrollY);
-    if (y < 140){ lastY = y; if (!over) set(false); return; }
+    if (y < 140){ lastY = y; setNav(false); if (!over) set(false); return; }
     const dy = y - lastY;
     if (Math.abs(dy) < 6) return;
     lastY = y;
-    if (!over) set(dy > 0);
+    const down = dy > 0;
+    setNav(down);
+    if (!over) set(down);
   }, { passive:true });
 
   toTop.addEventListener('pointerenter', () => { over = true; });
