@@ -1,6 +1,6 @@
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#293040;
-  --text:#e6edf3; --dim:#8b98a9; --accent:#4f8cff; --accent2:#7c5cff;
+  --text:#e6edf3; --dim:#8b98a9; --accent:#22d3ee; --accent2:#0891b2;
   --ok:#3fb950; --warn:#d29922; --err:#f85149;
 }
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@ hr{border:0;border-top:1px solid var(--line);margin:18px 0}
   padding:3px 7px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);
 }
 .tag.fast{color:#7ee787;border-color:rgba(63,185,80,.4)}
-.tag.ff{color:#a5b4fc;border-color:rgba(124,92,255,.4)}
+.tag.ff{color:#67e8f9;border-color:rgba(8,145,178,.55)}
 
 .crumb{display:flex;align-items:center;gap:12px;margin-bottom:18px}
 .crumb button{background:var(--panel);border:1px solid var(--line);color:var(--dim);
@@ -66,7 +66,7 @@ input:disabled,select:disabled{opacity:.45}
 
 button{
   font:600 15px/1 inherit;padding:13px 22px;border-radius:10px;border:0;cursor:pointer;
-  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;transition:.15s;
+  background:linear-gradient(135deg,#22d3ee,#0891b2);color:#04252e;transition:.15s;
 }
 button:hover:not(:disabled){filter:brightness(1.12)}
 button:disabled{opacity:.45;cursor:not-allowed}
@@ -90,7 +90,7 @@ button.sm{padding:8px 13px;font-size:13px}
   border:1px solid rgba(210,153,34,.35);color:#e8c46a}
 .note.err{background:rgba(248,81,73,.12);border-color:rgba(248,81,73,.4);color:#ff9d97}
 .note.ok{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.4);color:#7ee787}
-.note.info{background:rgba(79,140,255,.1);border-color:rgba(79,140,255,.35);color:#a8c7ff}
+.note.info{background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.35);color:#a8c7ff}
 
 .bar{height:9px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:14px 0 8px}
 .bar>i{display:block;height:100%;width:0;
@@ -140,11 +140,18 @@ audio{width:100%;border:0}
 .filerow .acts button{padding:5px 9px;font-size:12px;line-height:1}
 
 /* ================= video editor ================= */
-/* the editor needs far more room than the single-column tools */
+/* The editor needs far more room than the single-column tools. A class the
+   router sets is used rather than :has(), so this does not depend on selector
+   support -- if the container stayed 900px the three columns would overflow
+   and overlap each other. */
+.wrap.wide{max-width:1560px}
 .wrap:has(#panel-editor:not(.hide)){max-width:1560px}
 
-.nletop{display:grid;grid-template-columns:270px minmax(360px,1fr) 300px;gap:16px;margin-bottom:14px}
-@media (max-width:1100px){ .nletop{grid-template-columns:1fr} }
+/* minmax(0,...) everywhere: a plain 1fr refuses to shrink below its content,
+   which is what lets a wide preview canvas blow the grid out sideways */
+.nletop{display:grid;gap:16px;margin-bottom:14px;
+  grid-template-columns:minmax(0,270px) minmax(0,1fr) minmax(0,310px)}
+@media (max-width:1180px){ .nletop{grid-template-columns:minmax(0,1fr)} }
 .nlecol{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:14px;min-width:0}
 .nlecol .drop{padding:18px 12px}
 .nlecol .drop h3{font-size:14px}
@@ -172,15 +179,18 @@ audio{width:100%;border:0}
 .transport button{padding:9px 13px;font-size:14px;line-height:1}
 .transport .tc{margin-left:auto;font:12.5px ui-monospace,Consolas,monospace;color:var(--dim)}
 
-.nleprops .props{max-height:52vh;overflow:auto;margin-top:8px}
+.nleprops .props{max-height:52vh;overflow-y:auto;overflow-x:hidden;margin-top:8px;padding-right:6px}
 .props .phead{padding-bottom:9px;margin-bottom:9px;border-bottom:1px solid var(--line)}
 .props .phead b{font-size:13.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .props .phead small{color:var(--dim);font-size:11.5px}
-.props .prow{margin-bottom:11px}
-.props .prow label{font-size:10.5px;margin-bottom:4px}
-.props .prow input[type=number]{padding:6px 8px;font-size:13px}
-.props .prow input[type=number]+input[type=number]{margin-top:5px}
-.props .prow input[type=range]+input[type=range]{margin-top:4px}
+.props .prow{margin-bottom:15px}
+.props .prow label{display:block;font-size:10.5px;margin-bottom:6px;line-height:1.35;
+  white-space:normal;overflow-wrap:anywhere}
+.props .prow input[type=number]{display:block;width:100%;padding:6px 8px;font-size:13px}
+/* range thumbs overflow their track, so give them room of their own or they
+   collide with the label underneath */
+.props .prow input[type=range]{display:block;width:100%;height:20px;margin:0;padding:0}
+.props .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .props textarea{width:100%;padding:7px 9px;background:var(--panel2);border:1px solid var(--line);
   border-radius:7px;color:var(--text);font:13px inherit;resize:vertical}
 .props input[type=color]{width:100%;height:32px;padding:2px;background:var(--panel2);
@@ -213,21 +223,21 @@ audio{width:100%;border:0}
 .lanebody{position:relative;height:62px;background:
   repeating-linear-gradient(90deg,transparent,transparent 59px,rgba(255,255,255,.03) 59px,rgba(255,255,255,.03) 60px)}
 .lane.audio .lanebody{height:46px}
-.lanebody.over{background-color:rgba(79,140,255,.10)}
+.lanebody.over{background-color:rgba(34,211,238,.10)}
 
 .clip{position:absolute;top:4px;bottom:4px;border-radius:7px;overflow:hidden;cursor:grab;
   background:#243049 center/cover no-repeat;border:1px solid #3a4a6b;box-shadow:0 1px 3px rgba(0,0,0,.4);touch-action:none}
 .clip.audio{background:linear-gradient(180deg,#3b2f6b,#2a2350);border-color:#5b4a9e}
 .clip.text{background:linear-gradient(180deg,#1f4d3d,#17382c);border-color:#2f7d63}
 .clip.image{border-color:#6b5a3a}
-.clip.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(79,140,255,.45)}
+.clip.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(34,211,238,.45)}
 .clip .clabel{position:absolute;left:8px;right:8px;bottom:4px;font-size:11px;font-weight:600;
   color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
 .clip .grip{position:absolute;top:0;bottom:0;width:9px;cursor:ew-resize;z-index:2}
 .clip .grip.l{left:0;border-left:3px solid rgba(255,255,255,.35)}
 .clip .grip.r{right:0;border-right:3px solid rgba(255,255,255,.35)}
-.clip .grip:hover{background:rgba(79,140,255,.4)}
+.clip .grip:hover{background:rgba(34,211,238,.4)}
 
 .phead{position:absolute;top:0;width:2px;background:var(--err);z-index:5;pointer-events:none}
 .phead::before{content:'';position:absolute;top:0;left:-5px;border-left:6px solid transparent;

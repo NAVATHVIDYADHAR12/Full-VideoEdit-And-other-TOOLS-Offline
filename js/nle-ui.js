@@ -80,7 +80,7 @@ async function makeThumb(m){
       await C.seek(m.el, Math.min(1, m.duration/2));
       drawFit(c, m.el, m.el.videoWidth, m.el.videoHeight);
     } else {
-      c.fillStyle = '#7c5cff'; c.fillRect(0,0,160,90);
+      c.fillStyle = '#0e7490'; c.fillRect(0,0,160,90);
     }
     m.thumb = cv.toDataURL('image/jpeg', 0.7);
   } catch(_){ m.thumb = null; }
@@ -386,8 +386,8 @@ function renderProps(){
     html += row('Content', '<textarea data-k="text.content" rows="3">' + escapeHtml(c.text.content) + '</textarea>');
     html += row('Size', num('text.size', c.text.size, 8, 400, 1));
     html += row('Colour', '<input type="color" data-k="text.color" value="' + c.text.color + '">');
-    html += row('X / Y', num('text.x', c.text.x, 0, 1, 0.01) + num('text.y', c.text.y, 0, 1, 0.01),
-                '0–1 across the frame');
+    html += row('X / Y', '<div class="pair">' + num('text.x', c.text.x, 0, 1, 0.01) +
+                num('text.y', c.text.y, 0, 1, 0.01) + '</div>', '0–1 across the frame');
   }
   html += row('Duration (s)', num('duration', c.duration.toFixed(2), 0.05, 3600, 0.05));
   html += row('Start (s)', num('start', c.start.toFixed(2), 0, 36000, 0.05));
@@ -397,8 +397,8 @@ function renderProps(){
   if (isVis){
     html += row('Opacity', rng('transform.opacity', c.transform.opacity, 0, 1, 0.01));
     html += row('Scale', rng('transform.scale', c.transform.scale, 0.05, 4, 0.01));
-    html += row('Position X / Y', rng('transform.x', c.transform.x, -1, 1, 0.005) +
-                                  rng('transform.y', c.transform.y, -1, 1, 0.005));
+    html += row('Position X', rng('transform.x', c.transform.x, -1, 1, 0.005));
+    html += row('Position Y', rng('transform.y', c.transform.y, -1, 1, 0.005));
     html += row('Rotation', rng('transform.rotation', c.transform.rotation, -180, 180, 1));
     html += '<div class="psep">Colour</div>';
     html += row('Brightness', rng('filters.brightness', c.filters.brightness, 0, 3, 0.01));

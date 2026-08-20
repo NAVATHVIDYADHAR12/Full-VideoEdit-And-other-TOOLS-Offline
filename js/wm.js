@@ -133,12 +133,12 @@ function create(o){
     S.boxes.forEach((b,i) => {
       const r = px(b,W,H), on = i === S.sel;
       ctx2d.save();
-      ctx2d.strokeStyle = on ? '#4f8cff' : 'rgba(255,255,255,.85)';
+      ctx2d.strokeStyle = on ? '#22d3ee' : 'rgba(255,255,255,.85)';
       ctx2d.lineWidth = on ? 3 : 2;
       ctx2d.setLineDash(on ? [] : [7,5]);
       ctx2d.strokeRect(r.x, r.y, r.w, r.h);
       ctx2d.setLineDash([]);
-      ctx2d.fillStyle = on ? '#4f8cff' : 'rgba(255,255,255,.85)';
+      ctx2d.fillStyle = on ? '#22d3ee' : 'rgba(255,255,255,.85)';
       ctx2d.fillRect(r.x + r.w - 9, r.y + r.h - 9, 9, 9);
       ctx2d.restore();
     });

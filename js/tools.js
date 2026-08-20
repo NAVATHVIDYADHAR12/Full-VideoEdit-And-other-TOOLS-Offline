@@ -11,9 +11,13 @@ const { el, fmtBytes, fmtTime, escapeHtml, baseName, download, makePicker,
 const home = document.getElementById('home');
 const panels = [...document.querySelectorAll('.panel')];
 
+const wrapEl = document.querySelector('.wrap');
+
 function show(name){
   home.classList.toggle('hide', !!name);
   panels.forEach(p => p.classList.toggle('hide', p.id !== 'panel-' + name));
+  // the editor needs the wide container; a class beats relying on :has() support
+  if (wrapEl) wrapEl.classList.toggle('wide', name === 'editor');
   location.hash = name || '';
   window.scrollTo(0,0);
 }
