@@ -1,13 +1,14 @@
-/* hero-audio.js — the riser plays once through, triggered by the hero.
+/* hero-audio.js — the riser loops through the hero, triggered by the frames.
  *
- * Start scrolling the hero and it begins at the first note. From then on it runs
- * to its own end without interruption, whether you keep scrolling, slow down or
- * stop entirely. Scroll back to the top and it rewinds, ready to run again.
+ * It starts just after the first frame, loops for as long as you are inside the
+ * hero, and stops when the last frame is reached. Pausing partway through does
+ * not interrupt it -- the loop keeps running until you arrive at the end frame
+ * or climb back above the hero.
  *
- * It deliberately does NOT track scroll position. An earlier version scrubbed
- * currentTime to the frame progress and paused whenever the page stopped moving,
- * which was accurate but meant the riser broke up every time you paused to read.
- * A riser is a single gesture; chopping it into pieces ruins it.
+ * The clip is 13.5s and the hero is 340vh, so a slow reader would otherwise run
+ * out of sound long before the frames ran out. Looping is what covers the gap.
+ * It deliberately does NOT scrub currentTime to scroll position: an earlier
+ * version did, and it broke the riser into fragments every time you paused.
  *
  * THE ONE THING THAT CANNOT BE ENGINEERED AWAY
  * No browser lets a page make a sound until the visitor has clicked, tapped or
@@ -26,14 +27,16 @@ const hero = document.getElementById('hero');
 if (!hero) return;                     // landing page only
 
 const VOLUME  = 0.55;   // a riser at full scale is startling
-const FADE_MS = 260;    // gentle enough that the entry is not a jump cut
-const BEGIN   = 0.004;  // progress at which the frames are clearly moving
+const FADE_MS = 260;    // gentle enough that neither edge is a jump cut
+const BEGIN   = 0.004;  // just past the first frame, once the frames are moving
+const END     = 0.999;  // the last frame; float maths never quite reaches 1
 
 const audio = new Audio('assets/hero-riser.mp3');
 audio.preload = 'auto';
+audio.loop = true;      // one clip cannot cover 340vh of scrolling on its own
 audio.volume = 0;
 
-let started = false, fade = 0, ticking = false;
+let playing = false, fade = 0, ticking = false;
 let armed = false, errs = 0, told = false, told2 = false;
 
 audio.addEventListener('error', () => {
@@ -87,12 +90,11 @@ function ramp(to, done){
   }, 20);
 }
 
-function begin(){
-  started = true;
-  try { audio.currentTime = 0; } catch (e) {}
+function start(){
+  playing = true;
   const play = audio.play();
   if (play && play.catch) play.catch(() => {
-    started = false;                     // blocked: let the next scroll try again
+    playing = false;                     // blocked: let the next scroll try again
     if (!told2){ told2 = true;
       console.info('[hero-audio] blocked until you click the page once — ' +
                    'browsers never allow sound from scrolling alone.'); }
@@ -100,22 +102,35 @@ function begin(){
   ramp(VOLUME);
 }
 
-function rewind(){
-  started = false;
-  clearInterval(fade);
-  audio.volume = 0;
-  try { audio.pause(); audio.currentTime = 0; } catch (e) {}
+/* Fade rather than cut, so arriving at the last frame is a landing and not a
+   slammed door. rewind only when leaving over the top, where the next descent
+   should hear the riser from its opening again. */
+function halt(rewind){
+  if (!playing){
+    /* Already stopped. Do not start another fade on every scroll event up here;
+       just make sure a descent from the top begins at the opening note. */
+    if (rewind && audio.currentTime !== 0){
+      try { audio.currentTime = 0; } catch (e) {}
+    }
+    return;
+  }
+  playing = false;
+  ramp(0, () => {
+    try {
+      audio.pause();
+      if (rewind) audio.currentTime = 0;
+    } catch (e) {}
+  });
 }
 
 function onScroll(){
   if (errs >= 3) return;
   const p = progress();
 
-  // Back above the hero: reset so the next descent starts it cleanly again.
-  if (p <= 0){ if (started) rewind(); return; }
+  if (p <= 0){ halt(true);  return; }   // back above the hero
+  if (p >= END){ halt(false); return; }  // the last frame: this is the end of it
 
-  // First real movement of the frames starts it, and nothing stops it after.
-  if (!started && p >= BEGIN) begin();
+  if (!playing && p >= BEGIN) start();
 }
 
 addEventListener('scroll', () => {
@@ -127,9 +142,9 @@ addEventListener('scroll', () => {
 /* A hidden tab is paused by the browser anyway; pick the riser back up where it
    left off rather than losing the rest of it. */
 document.addEventListener('visibilitychange', () => {
-  if (!started) return;
+  if (!playing) return;
   if (document.hidden){ try { audio.pause(); } catch (e) {} }
-  else if (audio.currentTime > 0 && !audio.ended){
+  else {
     const play = audio.play();
     if (play && play.catch) play.catch(() => {});
   }
