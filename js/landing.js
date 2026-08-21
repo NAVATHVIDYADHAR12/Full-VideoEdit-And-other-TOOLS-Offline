@@ -84,7 +84,27 @@ document.querySelectorAll('a[data-scroll]').forEach(a => {
     const target = document.querySelector(a.getAttribute('href'));
     if (!target) return;
     e.preventDefault();
-    target.scrollIntoView({ behavior:'smooth', block:'start' });
+
+    const landing = document.getElementById('landing');
+    const buried = landing && landing.classList.contains('hide');
+
+    if (!buried){
+      target.scrollIntoView({ behavior:'smooth', block:'start' });
+      return;
+    }
+
+    /* A tool is open, so the section is inside a hidden container: scrolling to
+       it would do nothing at all. Clear the hash to send the router back to the
+       landing page, then scroll once it has actually swapped the view in.
+       Waiting on hashchange rather than a timer means no guessed delay. */
+    const afterSwap = () => {
+      window.removeEventListener('hashchange', afterSwap);
+      requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior:'smooth', block:'start' });
+      });
+    };
+    window.addEventListener('hashchange', afterSwap);
+    location.hash = '';
   });
 });
 
