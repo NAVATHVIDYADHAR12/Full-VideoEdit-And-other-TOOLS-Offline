@@ -1288,3 +1288,119 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
   font:600 9.5px/1.35 var(--sans);
   letter-spacing:.13em; text-transform:uppercase;
 }
+
+/* ================= glass bubble cursor ================= */
+/* The real cursor is hidden wherever it is only decorative. It is kept wherever
+   its shape carries information -- grab on a clip, ew-resize on a trim handle,
+   crosshair on the watermark stage, the I-beam in a field. cursor.js reads the
+   computed value on hover and hides the bubble wherever the real one survives,
+   so the two are never on screen together and this list stays the only list. */
+.gcur-on, .gcur-on *{ cursor:none; }
+
+.gcur-on .wmstage canvas{ cursor:crosshair; }
+.gcur-on .poolitem,
+.gcur-on .clip{ cursor:grab; }
+.gcur-on .poolitem:active,
+.gcur-on .clip:active{ cursor:grabbing; }
+.gcur-on .clip .grip{ cursor:ew-resize; }
+.gcur-on .lightbox{ cursor:zoom-out; }
+.gcur-on .shot.carousel .cslide.active{ cursor:zoom-in; }
+.gcur-on input, .gcur-on textarea, .gcur-on select,
+.gcur-on [contenteditable]{ cursor:auto; }
+.gcur-on input[type="range"]{ cursor:pointer; }
+.gcur-on video[controls]{ cursor:auto; }
+.gcur-on button:disabled{ cursor:not-allowed; }
+
+/* the wrapper carries no size: it is just the point the ball hangs from */
+.gcur{
+  position:fixed; top:0; left:0; width:0; height:0;
+  pointer-events:none; z-index:9000;
+  opacity:0; transition:opacity .32s ease;
+  will-change:transform;
+}
+.gcur.in{ opacity:1; }
+.gcur.off{ opacity:0; }
+
+/* the ball */
+.gcur-rim{
+  position:absolute; left:-21px; top:-21px; width:42px; height:42px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.22);
+  background:
+    radial-gradient(58% 58% at 34% 30%, rgba(255,255,255,.20), rgba(255,255,255,.04) 52%, transparent 72%),
+    radial-gradient(100% 100% at 50% 55%, rgba(198,161,91,.13), rgba(198,161,91,.03) 60%, transparent 78%);
+  backdrop-filter:blur(2.4px) saturate(165%) brightness(1.06);
+  -webkit-backdrop-filter:blur(2.4px) saturate(165%) brightness(1.06);
+  box-shadow:
+    inset 0 1px 10px rgba(255,255,255,.16),
+    inset 0 -6px 14px rgba(198,161,91,.10),
+    0 6px 20px rgba(0,0,0,.30);
+  transition:transform .34s cubic-bezier(.22,.61,.36,1),
+             border-color .34s ease, box-shadow .34s ease;
+  animation:gcur-breathe 5.2s ease-in-out infinite;
+}
+
+/* the specular glint, drifting slowly so the ball never looks like a decal */
+.gcur-sheen{
+  position:absolute; left:-21px; top:-21px; width:42px; height:42px;
+  border-radius:50%; overflow:hidden; opacity:.85;
+  transition:transform .34s cubic-bezier(.22,.61,.36,1), opacity .34s ease;
+}
+.gcur-sheen::before{
+  content:''; position:absolute; left:19%; top:14%; width:38%; height:28%;
+  border-radius:50%;
+  background:linear-gradient(140deg, rgba(255,255,255,.62), rgba(255,255,255,.05));
+  filter:blur(2.2px);
+  animation:gcur-glint 5.2s ease-in-out infinite;
+}
+
+/* over something clickable the ball opens up and thins out */
+.gcur.hot .gcur-rim{
+  transform:scale(1.62);
+  border-color:rgba(227,201,130,.42);
+  box-shadow:
+    inset 0 1px 14px rgba(255,255,255,.20),
+    inset 0 -8px 18px rgba(198,161,91,.16),
+    0 10px 30px rgba(0,0,0,.34);
+}
+.gcur.hot .gcur-sheen{ transform:scale(1.62); opacity:.5; }
+
+/* and pinches on press */
+.gcur.press .gcur-rim,
+.gcur.press .gcur-sheen{ transform:scale(.82); }
+.gcur.hot.press .gcur-rim,
+.gcur.hot.press .gcur-sheen{ transform:scale(1.3); }
+
+/* the exact point, with no lag, so precision never suffers */
+.gcur-dot{
+  position:fixed; top:0; left:0; width:4px; height:4px; margin:-2px 0 0 -2px;
+  border-radius:50%; background:var(--accent2);
+  pointer-events:none; z-index:9001;
+  opacity:0; transition:opacity .32s ease;
+  will-change:transform;
+}
+.gcur-dot.in{ opacity:.85; }
+.gcur-dot.off{ opacity:0; }
+
+/* the wave it leaves behind -- landing page only, injected nowhere else */
+.gcur-wave{
+  position:fixed; inset:0; width:100%; height:100%;
+  pointer-events:none; z-index:8999;
+}
+
+@keyframes gcur-breathe{
+  0%,100%{ border-radius:50% 50% 50% 50%; }
+  33%    { border-radius:53% 47% 49% 51%; }
+  66%    { border-radius:47% 52% 51% 48%; }
+}
+@keyframes gcur-glint{
+  0%,100%{ transform:translate(0,0) rotate(0deg); opacity:.85; }
+  50%    { transform:translate(11%,7%) rotate(16deg); opacity:.62; }
+}
+
+/* the script never injects any of this on a touch screen or under reduced
+   motion, but belt and braces in case the markup is ever hand-placed */
+@media (hover:none), (pointer:coarse), (prefers-reduced-motion:reduce){
+  .gcur, .gcur-dot, .gcur-wave{ display:none !important; }
+  .gcur-on, .gcur-on *{ cursor:auto; }
+}
