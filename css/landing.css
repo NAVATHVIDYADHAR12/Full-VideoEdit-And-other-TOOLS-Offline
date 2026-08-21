@@ -810,3 +810,78 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 @media (prefers-reduced-motion:reduce){
   .shot.carousel .cslide{ transition:opacity .2s linear; }
 }
+
+/* ================= lightbox ================= */
+/* The page is blurred rather than covered, so the reader keeps a sense of where
+   they were. Nothing here is a modal in the trapping sense: a click anywhere
+   dismisses it. */
+
+.lightbox{
+  position:fixed; inset:0; z-index:400;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(20px, 5vh, 64px);
+  background:rgba(8,8,8,.72);
+  backdrop-filter:blur(22px) saturate(120%);
+  -webkit-backdrop-filter:blur(22px) saturate(120%);
+  opacity:0; pointer-events:none;
+  transition:opacity .38s cubic-bezier(.22,.61,.36,1);
+  cursor:zoom-out;
+}
+.lightbox.open{ opacity:1; pointer-events:auto; }
+
+.lbimg{
+  max-width:100%; max-height:100%;
+  width:auto; height:auto;
+  display:block; object-fit:contain;
+  border:1px solid rgba(198,161,91,.45);
+  box-shadow:0 0 0 1px rgba(198,161,91,.22),
+             0 0 90px rgba(198,161,91,.13),
+             0 40px 110px rgba(0,0,0,.75);
+  /* settles in as the full-resolution file arrives, rather than snapping */
+  opacity:0; transform:scale(.965);
+  transition:opacity .45s cubic-bezier(.22,.61,.36,1),
+             transform .45s cubic-bezier(.22,.61,.36,1);
+}
+.lbimg.ready{ opacity:1; transform:none; }
+
+/* arrows stop the click reaching the backdrop, so they navigate not dismiss */
+.lbnav{
+  position:absolute; top:50%; transform:translateY(-50%); z-index:2;
+  width:46px; height:46px; padding:0 !important; border-radius:50% !important;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(8,8,8,.5) !important;
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(198,161,91,.34) !important;
+  color:var(--accent2) !important; cursor:pointer; opacity:.7;
+  transition:opacity .3s ease, background .3s ease, border-color .3s ease;
+}
+.lbnav:hover{ opacity:1; background:rgba(8,8,8,.78) !important;
+  border-color:var(--accent) !important; }
+.lbnav svg{ width:19px; height:19px; fill:none; stroke:currentColor;
+  stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.lbnav.prev{ left:clamp(12px,3vw,40px); }
+.lbnav.next{ right:clamp(12px,3vw,40px); }
+
+.lbcount{
+  position:absolute; top:clamp(18px,4vh,40px); left:0; right:0; text-align:center;
+  font:600 11px/1 var(--sans); letter-spacing:.2em; color:var(--accent);
+  pointer-events:none;
+}
+.lbhint{
+  position:absolute; bottom:clamp(16px,3.5vh,34px); left:0; right:0; text-align:center;
+  font:400 10.5px/1 var(--sans); letter-spacing:.2em; text-transform:uppercase;
+  color:var(--dim); opacity:.65; pointer-events:none;
+}
+
+/* the focused card advertises that it opens */
+.shot.carousel .cslide.active{ cursor:zoom-in; }
+
+@media (max-width:620px){
+  .lightbox{ padding:14px; }
+  .lbnav{ width:38px; height:38px; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .lightbox,.lbimg{ transition:none; }
+  .lbimg{ opacity:1; transform:none; }
+}
