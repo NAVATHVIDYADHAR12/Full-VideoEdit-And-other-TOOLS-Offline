@@ -1453,34 +1453,3 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
   .gcur, .gcur-dot, .gcur-wave{ display:none !important; }
   .gcur-on, .gcur-on *{ cursor:auto; }
 }
-
-/* ================= hero sound toggle ================= */
-/* Bottom-left of the hero, opposite the "rendered locally" note. Quiet until
-   hovered or switched on -- it is an offer, not a demand. Delete this block,
-   js/hero-audio.js, its script tag and assets/hero-riser.mp3 to remove the
-   feature completely. */
-.heroaud{
-  position:absolute; left:0; bottom:32px; z-index:3;
-  display:inline-flex; align-items:center; gap:9px;
-  padding:8px 14px 8px 11px;
-  background:rgba(17,16,15,.55); border:1px solid var(--line); border-radius:2px;
-  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-  color:var(--dim); font:600 10px/1 var(--sans);
-  letter-spacing:.18em; text-transform:uppercase;
-  opacity:.45;
-  transition:opacity .4s ease, color .4s ease, border-color .4s ease;
-}
-.heroaud svg{ width:14px; height:14px; flex:0 0 auto; }
-.heroaud:hover{ opacity:1; color:var(--text); border-color:var(--accent); }
-.heroaud.on{ opacity:1; color:var(--accent2); border-color:rgba(198,161,91,.45); }
-
-/* It stays for the whole hero rather than leaving with the headline. The
-   .scrolled class fires at 2% progress, so hiding on it would snatch the
-   control away the instant anyone started scrolling -- and the sound is worth
-   offering for the whole climb, not only from a standing start. The sticky
-   stage carries it out of view on its own once the hero is done. */
-
-@media (max-width:640px){
-  .heroaud span{ display:none; }
-  .heroaud{ padding:9px 11px; }
-}
