@@ -15,7 +15,6 @@ const navLinks = document.getElementById('navlinks');
 const navToggle= document.getElementById('navtoggle');
 const hero     = document.getElementById('hero');
 const canvas   = document.getElementById('heroframes');
-const counter  = document.getElementById('framecount');
 const heroInner= document.getElementById('heroinner');
 const toTop    = document.getElementById('totop');
 
@@ -136,7 +135,6 @@ function draw(i){
   const img = nearestLoaded(i);
   if (!img) return;
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  if (counter) counter.textContent = String(i + 1).padStart(3, '0');
 }
 
 function update(){

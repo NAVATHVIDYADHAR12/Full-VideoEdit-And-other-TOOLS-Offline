@@ -180,7 +180,11 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 
 .heroframe{ position:absolute; z-index:2; color:var(--dim); font-size:10.5px;
   letter-spacing:.18em; text-transform:uppercase; }
-.heroframe.tl{ top:104px; left:0; }
+.heroframe.tl{ top:104px; left:0;
+  transition:opacity .5s ease; }
+/* An instruction to scroll has no business still being there once you have.
+   .scrolled is set at 2% progress, so it goes almost the moment you move. */
+.hero.scrolled .heroframe.tl{ opacity:0; }
 .heroframe.br{ bottom:34px; right:0; }
 .heroframe b{ color:var(--accent); font-weight:600; }
 
