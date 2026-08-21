@@ -1,16 +1,20 @@
-/* hero-audio.js — a riser scrubbed by the hero frames. No control, no UI.
+/* hero-audio.js — the riser plays once through, triggered by the hero.
  *
- * Scroll the hero and it sounds; stop and it stops. The clip is 13.5s and the
- * hero is 340vh, so currentTime = progress * duration and the riser lands on its
- * last note exactly as frame 080 draws. Progress is read the same way
- * landing.js reads it for the frames, so the two cannot drift apart.
+ * Start scrolling the hero and it begins at the first note. From then on it runs
+ * to its own end without interruption, whether you keep scrolling, slow down or
+ * stop entirely. Scroll back to the top and it rewinds, ready to run again.
+ *
+ * It deliberately does NOT track scroll position. An earlier version scrubbed
+ * currentTime to the frame progress and paused whenever the page stopped moving,
+ * which was accurate but meant the riser broke up every time you paused to read.
+ * A riser is a single gesture; chopping it into pieces ruins it.
  *
  * THE ONE THING THAT CANNOT BE ENGINEERED AWAY
- * No browser will let a page make a sound until the visitor has interacted with
- * it -- a click, a tap or a key. Scrolling does not count, on any browser. So
- * this arms itself on the first such gesture anywhere on the page and is silent
- * before then. Nothing can change that; it is a deliberate protection against
- * pages that shout at you on arrival. In practice: click once, then scroll.
+ * No browser lets a page make a sound until the visitor has clicked, tapped or
+ * typed on it. Scrolling never counts. So this spends the first such gesture by
+ * playing once while muted, which leaves the element unblocked without the
+ * arming itself being audible. Before that gesture it is silent, and no code can
+ * change that.
  *
  * SELF-CONTAINED. To remove the feature: delete this file, its one script tag in
  * index.html, and assets/hero-riser.mp3. Nothing else refers to any of it.
@@ -22,20 +26,16 @@ const hero = document.getElementById('hero');
 if (!hero) return;                     // landing page only
 
 const VOLUME  = 0.55;   // a riser at full scale is startling
-const DRIFT   = 0.35;   // seconds out of step before re-seeking is worth it
-const IDLE_MS = 170;    // silence this long after scrolling stops
-const FADE_MS = 120;    // enough to kill the click at each edge
+const FADE_MS = 260;    // gentle enough that the entry is not a jump cut
+const BEGIN   = 0.004;  // progress at which the frames are clearly moving
 
 const audio = new Audio('assets/hero-riser.mp3');
 audio.preload = 'auto';
 audio.volume = 0;
 
-let armed = false, idle = 0, fade = 0, ticking = false;
-let errs = 0, told = false, told2 = false;
+let started = false, fade = 0, ticking = false;
+let armed = false, errs = 0, told = false, told2 = false;
 
-/* Say what went wrong. The first version failed silently, which is how a
-   missing MIME type on the local server passed for "the audio does not work".
-   A served octet-stream will not decode in <audio> however valid the file. */
 audio.addEventListener('error', () => {
   errs++;
   const e = audio.error;
@@ -49,9 +49,6 @@ audio.addEventListener('canplay', () => {
 });
 
 /* ================= arming ================= */
-/* Play once while muted: that is what spends the user's gesture and leaves the
-   element unblocked for later. Doing it silently means the click that unlocks
-   it is never itself audible. */
 const GESTURES = ['pointerdown', 'touchstart', 'keydown', 'click'];
 
 function arm(){
@@ -64,9 +61,7 @@ function arm(){
     audio.currentTime = 0;
     audio.muted = false;
     finishArming();
-  }).catch(() => {
-    audio.muted = false;          // still blocked; leave the listeners in place
-  });
+  }).catch(() => { audio.muted = false; });   // still blocked; keep listening
 }
 function finishArming(){
   armed = true;
@@ -92,58 +87,52 @@ function ramp(to, done){
   }, 20);
 }
 
-function stop(){
-  clearTimeout(idle);
-  if (audio.paused){ audio.volume = 0; return; }
-  ramp(0, () => { try { audio.pause(); } catch (e) {} });
+function begin(){
+  started = true;
+  try { audio.currentTime = 0; } catch (e) {}
+  const play = audio.play();
+  if (play && play.catch) play.catch(() => {
+    started = false;                     // blocked: let the next scroll try again
+    if (!told2){ told2 = true;
+      console.info('[hero-audio] blocked until you click the page once — ' +
+                   'browsers never allow sound from scrolling alone.'); }
+  });
+  ramp(VOLUME);
 }
 
-function sync(){
+function rewind(){
+  started = false;
+  clearInterval(fade);
+  audio.volume = 0;
+  try { audio.pause(); audio.currentTime = 0; } catch (e) {}
+}
+
+function onScroll(){
+  if (errs >= 3) return;
   const p = progress();
 
-  // above the hero, or past it: silence, and rewind ready for the next pass
-  if (p <= 0 || p >= 1){
-    stop();
-    if (p <= 0 && audio.duration) { try { audio.currentTime = 0; } catch (e) {} }
-    return;
-  }
-  if (errs >= 3) return;            // the file genuinely will not load
+  // Back above the hero: reset so the next descent starts it cleanly again.
+  if (p <= 0){ if (started) rewind(); return; }
 
-  const dur = audio.duration;
-  if (dur){
-    const target = dur * p;
-    if (Math.abs(audio.currentTime - target) > DRIFT){
-      try { audio.currentTime = target; } catch (e) { /* not seekable yet */ }
-    }
-  }
-
-  if (audio.paused){
-    /* Try every time rather than trusting our own arming flag. If the visitor
-       clicked anything at all earlier, the document already carries activation
-       and this simply works; if not, it is refused and we stay quiet. The
-       browser is the authority on that, not us. */
-    const play = audio.play();
-    if (play && play.catch) play.catch(() => {
-      if (!armed && !told2){ told2 = true;
-        console.info('[hero-audio] blocked until you click the page once — ' +
-                     'browsers never allow sound from scrolling alone.'); }
-    });
-  }
-  ramp(VOLUME);
-
-  /* Sound only while the page is actually moving. This is what makes it read as
-     scrubbing rather than as a track playing underneath the page. */
-  clearTimeout(idle);
-  idle = setTimeout(stop, IDLE_MS);
+  // First real movement of the frames starts it, and nothing stops it after.
+  if (!started && p >= BEGIN) begin();
 }
 
 addEventListener('scroll', () => {
   if (ticking) return;
   ticking = true;
-  requestAnimationFrame(() => { ticking = false; sync(); });
+  requestAnimationFrame(() => { ticking = false; onScroll(); });
 }, { passive:true });
 
-/* coming back to a tab mid-swell is unpleasant */
-document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+/* A hidden tab is paused by the browser anyway; pick the riser back up where it
+   left off rather than losing the rest of it. */
+document.addEventListener('visibilitychange', () => {
+  if (!started) return;
+  if (document.hidden){ try { audio.pause(); } catch (e) {} }
+  else if (audio.currentTime > 0 && !audio.ended){
+    const play = audio.play();
+    if (play && play.catch) play.catch(() => {});
+  }
+});
 
 })();
