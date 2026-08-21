@@ -30,9 +30,23 @@ const audio = new Audio('assets/hero-riser.mp3');
 audio.preload = 'auto';
 audio.volume = 0;
 
-let armed = false, dead = false, idle = 0, fade = 0, ticking = false;
+let armed = false, idle = 0, fade = 0, ticking = false;
+let errs = 0, told = false, told2 = false;
 
-audio.addEventListener('error', () => { dead = true; });
+/* Say what went wrong. The first version failed silently, which is how a
+   missing MIME type on the local server passed for "the audio does not work".
+   A served octet-stream will not decode in <audio> however valid the file. */
+audio.addEventListener('error', () => {
+  errs++;
+  const e = audio.error;
+  console.warn('[hero-audio] cannot load assets/hero-riser.mp3' +
+               (e ? ' (code ' + e.code + ')' : '') +
+               ' — check it is served as audio/mpeg.');
+});
+audio.addEventListener('canplay', () => {
+  if (!told){ told = true; console.info('[hero-audio] ready, ' +
+    (audio.duration || 0).toFixed(1) + 's — click anywhere once, then scroll.'); }
+});
 
 /* ================= arming ================= */
 /* Play once while muted: that is what spends the user's gesture and leaves the
@@ -41,7 +55,7 @@ audio.addEventListener('error', () => { dead = true; });
 const GESTURES = ['pointerdown', 'touchstart', 'keydown', 'click'];
 
 function arm(){
-  if (armed || dead) return;
+  if (armed || errs >= 3) return;
   audio.muted = true;
   const p = audio.play();
   if (!p || !p.then){ finishArming(); return; }
@@ -85,7 +99,6 @@ function stop(){
 }
 
 function sync(){
-  if (dead) return;
   const p = progress();
 
   // above the hero, or past it: silence, and rewind ready for the next pass
@@ -94,7 +107,7 @@ function sync(){
     if (p <= 0 && audio.duration) { try { audio.currentTime = 0; } catch (e) {} }
     return;
   }
-  if (!armed) return;               // no gesture yet, so nothing may sound
+  if (errs >= 3) return;            // the file genuinely will not load
 
   const dur = audio.duration;
   if (dur){
@@ -105,8 +118,16 @@ function sync(){
   }
 
   if (audio.paused){
+    /* Try every time rather than trusting our own arming flag. If the visitor
+       clicked anything at all earlier, the document already carries activation
+       and this simply works; if not, it is refused and we stay quiet. The
+       browser is the authority on that, not us. */
     const play = audio.play();
-    if (play && play.catch) play.catch(() => {});
+    if (play && play.catch) play.catch(() => {
+      if (!armed && !told2){ told2 = true;
+        console.info('[hero-audio] blocked until you click the page once — ' +
+                     'browsers never allow sound from scrolling alone.'); }
+    });
   }
   ramp(VOLUME);
 

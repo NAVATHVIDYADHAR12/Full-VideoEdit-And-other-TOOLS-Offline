@@ -24,6 +24,22 @@ const MIME = {
   '.png' :'image/png',
   '.svg' :'image/svg+xml',
   '.ico' :'image/x-icon',
+  /* Audio and video are strict about this in a way images are not: a browser
+     will happily sniff an octet-stream into an <img>, but <audio> refuses to
+     decode one, which is exactly how the hero riser came to be silent. */
+  '.mp3' :'audio/mpeg',
+  '.wav' :'audio/wav',
+  '.m4a' :'audio/mp4',
+  '.ogg' :'audio/ogg',
+  '.mp4' :'video/mp4',
+  '.webm':'video/webm',
+  '.jpg' :'image/jpeg',
+  '.jpeg':'image/jpeg',
+  '.webp':'image/webp',
+  '.gif' :'image/gif',
+  '.woff2':'font/woff2',
+  '.woff':'font/woff',
+  '.txt' :'text/plain; charset=utf-8',
 };
 
 const server = http.createServer((req, res) => {

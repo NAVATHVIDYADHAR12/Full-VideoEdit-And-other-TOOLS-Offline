@@ -762,7 +762,19 @@ out-specify a bare tag selector. Name them explicitly rather than hoping.
 
 **P9 — Never wildcard-delete.** Delete by exact filename only.
 
-**P10 — Verify against the real cascade, not a screenshot.** Parse both sheets in
+**P10 — `<audio>` will not decode an octet-stream.** A browser happily sniffs a
+mistyped image into an `<img>`, so a MIME table missing `.jpg` looks fine for
+years. Audio is strict: serve an mp3 without `audio/mpeg` and it fails to load,
+and if the error handler is silent the feature simply appears not to work. Check
+the dev server's MIME map before blaming the code, and never swallow a media
+`error` event.
+
+**P11 — `node --check` proves syntax, not existence.** Deleting a variable and
+leaving two references behind passes the syntax check and then throws
+`ReferenceError` at runtime, on every event. After any rename or removal, grep
+for the old identifier and run the code path once.
+
+**P12 — Verify against the real cascade, not a screenshot.** Parse both sheets in
 load order, compute specificity, model inheritance, and check both the container
 *and* its inner text node.
 
