@@ -11,7 +11,7 @@
   position:fixed; top:18px; left:50%; transform:translateX(-50%);
   z-index:200; width:min(1180px, calc(100% - 40px));
   display:flex; align-items:center; gap:26px;
-  padding:13px 11px 13px 22px;
+  padding:13px 4px 13px 22px;
   border:1px solid transparent; border-radius:2px;
   background:transparent;
   transition:background .5s ease, border-color .5s ease, padding .5s ease, backdrop-filter .5s ease;
@@ -22,7 +22,7 @@
   backdrop-filter:blur(18px) saturate(140%);
   -webkit-backdrop-filter:blur(18px) saturate(140%);
   border-color:var(--line);
-  padding:10px 9px 10px 20px;
+  padding:10px 4px 10px 20px;
 }
 /* One lockup: the V/A mark and the wordmark are a single link home. The mark
    points at the same file the browser tab uses, so the two can never drift. */
@@ -895,7 +895,7 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .navburger{
   /* claws back most of the bar's 26px flex gap, so the button sits
      beside the action rather than adrift from it */
-  flex:0 0 auto; margin-left:-15px;
+  flex:0 0 auto; margin-left:-8px;
   width:40px; height:38px; padding:0 !important; border-radius:2px !important;
   background:transparent !important;
   border:1px solid var(--line) !important;
