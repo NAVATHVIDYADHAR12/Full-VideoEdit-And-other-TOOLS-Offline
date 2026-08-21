@@ -15,3 +15,6 @@ node_modules/
 
 # stray offsets from editing scripts
 .pdfblocks.*
+
+# scratch notes inside the guide folder
+hero section prompt animation/useThem
