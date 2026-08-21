@@ -50,6 +50,10 @@ menu.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
       '<path d="M20.6 13.4 12 22l-9-9V3h10z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>' +
     '<span><b>Pricing</b><small>Plans and what they include</small></span></a>' +
+  '<a class="mitem" href="index.html#feedback">' +
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-2.8-.4L3 21l1.9-5.1A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>' +
+    '<span><b>Feedback &amp; support</b><small>Rate it, or get help</small></span></a>' +
   '<a class="mitem" href="tools.html">' +
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
       '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>' +
