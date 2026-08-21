@@ -709,3 +709,104 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .toolcard.soon small{ opacity:.62; }
 .toolcard.soon .go{ color:var(--dim); opacity:.7; }
 .toolcard.soon:hover .go{ color:var(--dim); gap:9px; }
+/* ================= feature coverflow ================= */
+/* Three cards at once: the focused one centre, full size and full colour with a
+   champagne edge; its neighbours behind it, smaller, dimmed and desaturated so
+   the eye is never in doubt about which one is the subject. */
+
+.shot.carousel{ background:var(--bg); }
+/* the container must not glow, or it competes with the card that should */
+.shot.carousel:hover{ border-color:var(--line); box-shadow:none; }
+.shot.carousel::after{ display:none; }
+.shot.carousel::before{ display:none; }
+
+.cstage{ position:absolute; inset:0; }
+
+.shot.carousel .cslide{
+  position:absolute; top:50%; left:50%;
+  width:56%; height:auto; aspect-ratio:16/10;
+  object-fit:cover; display:block;
+  border:1px solid var(--line);
+  transform:translate(-50%,-50%) scale(.66);
+  opacity:0; pointer-events:none;
+  filter:brightness(.38) saturate(.45);
+  transition:transform .8s cubic-bezier(.22,.61,.36,1),
+             opacity .7s ease,
+             filter .7s ease,
+             border-color .5s ease,
+             box-shadow .6s ease;
+}
+
+/* the two shoulders */
+.shot.carousel .cslide.prev,
+.shot.carousel .cslide.next{
+  opacity:.52; pointer-events:auto; cursor:pointer;
+}
+.shot.carousel .cslide.prev{ transform:translate(-50%,-50%) translateX(-49%) scale(.72); }
+.shot.carousel .cslide.next{ transform:translate(-50%,-50%) translateX(49%)  scale(.72); }
+.shot.carousel .cslide.prev:hover,
+.shot.carousel .cslide.next:hover{
+  opacity:.78; filter:brightness(.58) saturate(.72); border-color:rgba(198,161,91,.4);
+}
+
+/* anything further out waits off stage */
+.shot.carousel .cslide.far{
+  opacity:0; transform:translate(-50%,-50%) scale(.58);
+}
+
+/* the subject */
+.shot.carousel .cslide.active{
+  opacity:1; pointer-events:auto; cursor:default;
+  filter:none;
+  transform:translate(-50%,-50%) scale(1);
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px rgba(198,161,91,.55),
+             0 0 44px rgba(198,161,91,.28),
+             0 0 110px rgba(198,161,91,.10),
+             0 26px 62px rgba(0,0,0,.62);
+}
+
+/* ---------- controls: present, but never in the way ---------- */
+.cnav{
+  position:absolute; top:50%; transform:translateY(-50%); z-index:20;
+  width:42px; height:42px; padding:0 !important; border-radius:50% !important;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(8,8,8,.30) !important;
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(198,161,91,.34) !important;
+  color:var(--accent2) !important;
+  cursor:pointer; opacity:.62;
+  transition:opacity .35s ease, background .35s ease, border-color .35s ease;
+}
+.shot.carousel:hover .cnav{ opacity:1; }
+.cnav:hover{ background:rgba(8,8,8,.66) !important; border-color:var(--accent) !important; }
+.cnav svg{ width:17px; height:17px; fill:none; stroke:currentColor;
+  stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.cnav.prev{ left:14px; }
+.cnav.next{ right:14px; }
+
+.cdots{
+  position:absolute; left:0; right:0; bottom:15px; z-index:20;
+  display:flex; justify-content:center; gap:7px;
+}
+.cdot{
+  width:6px; height:6px; padding:0 !important; border-radius:50% !important;
+  background:rgba(184,176,163,.32) !important; border:0 !important;
+  cursor:pointer;
+  transition:background .35s ease, transform .35s ease;
+}
+.cdot:hover{ background:rgba(198,161,91,.6) !important; }
+.cdot.on{ background:var(--accent) !important; transform:scale(1.4); }
+
+.shot.carousel:focus-visible{ outline:1px solid var(--accent); outline-offset:3px; }
+
+@media (max-width:620px){
+  .shot.carousel .cslide{ width:66%; }
+  .shot.carousel .cslide.prev{ transform:translate(-50%,-50%) translateX(-54%) scale(.66); }
+  .shot.carousel .cslide.next{ transform:translate(-50%,-50%) translateX(54%)  scale(.66); }
+  .cnav{ width:36px; height:36px; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .shot.carousel .cslide{ transition:opacity .2s linear; }
+}
