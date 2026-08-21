@@ -189,9 +189,17 @@ function addActions(node, acts){
     b.type = 'button';
     b.textContent = label;
     b.onclick = () => {
-      // the router already listens for hash changes, so this drives it
-      if (target) location.hash = target;
-      else document.getElementById('tools').scrollIntoView({ behavior:'smooth' });
+      // On the landing page the router listens for hash changes, so setting the
+      // hash is enough. On the collection page there are no tool panels at all,
+      // so the same click has to navigate instead of silently doing nothing.
+      if (target){
+        if (document.getElementById('panel-' + target)) location.hash = target;
+        else location.href = 'index.html#' + target;
+      } else {
+        const grid = document.getElementById('tools') || document.getElementById('grid');
+        if (grid) grid.scrollIntoView({ behavior:'smooth' });
+        else location.href = 'tools.html';
+      }
       close();
     };
     wrap.appendChild(b);
