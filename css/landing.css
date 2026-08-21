@@ -1326,6 +1326,18 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .gcur-on .authclose,
 .gcur-on .chatclose{ cursor:default; }
 
+/* Card-shaped blocks take the arrow across their whole face, clickable or not.
+   A capability card holds text on one side and a demo or picture on the other;
+   letting the image half answer with an arrow while the text half kept the
+   bubble made one card feel like two. Children inherit, so naming the container
+   is enough. The treadmill band is left out on purpose -- it is a moving
+   backdrop rather than a card, so travelling over it still ripples. */
+.gcur-on .feature,
+.gcur-on .fbcell,
+.gcur-on .plan,
+.gcur-on .soonrow,
+.gcur-on .pnotice{ cursor:default; }
+
 /* Two rules in this sheet out-specify a bare tag selector, so they are named in
    full rather than left to win by accident. */
 .gcur-on .navmenu .mitem{ cursor:default; }
