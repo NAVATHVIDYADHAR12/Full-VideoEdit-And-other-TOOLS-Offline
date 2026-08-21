@@ -19,9 +19,17 @@
 (function () {
 'use strict';
 
-const fine   = matchMedia('(pointer:fine)').matches && matchMedia('(hover:hover)').matches;
-const calm   = matchMedia('(prefers-reduced-motion:reduce)').matches;
-if (!fine || calm) return;
+/* DESKTOP ONLY, AND CHECKED TWICE.
+   pointer:fine means the primary pointer is a mouse, trackpad or stylus;
+   hover:hover means it can rest over a thing without committing to it. Phones
+   and tablets fail both, so nothing below ever runs there -- no elements are
+   injected and the ordinary cursor is left completely alone. A laptop with a
+   touch screen still passes, which is right: it has a trackpad. */
+const mqFine  = matchMedia('(pointer:fine)');
+const mqHover = matchMedia('(hover:hover)');
+const calm    = matchMedia('(prefers-reduced-motion:reduce)').matches;
+const desktop = () => mqFine.matches && mqHover.matches;
+if (!desktop() || calm) return;
 
 const root    = document.documentElement;
 const landing = document.getElementById('landing');   // absent off the landing page
@@ -198,5 +206,20 @@ function frame(){
 }
 
 kick();
+
+/* If the primary pointer stops being a mouse -- a tablet undocked from its
+   keyboard, a responsive-design preview, a mouse unplugged -- pull everything
+   back out and hand the real cursor over. */
+function teardown(){
+  root.classList.remove('gcur-on');
+  bubble.remove(); dot.remove();
+  if (cvs) cvs.remove();
+  rings.length = 0;
+}
+const watch = () => { if (!desktop()) teardown(); };
+if (mqFine.addEventListener){
+  mqFine.addEventListener('change', watch);
+  mqHover.addEventListener('change', watch);
+}
 
 })();
