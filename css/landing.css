@@ -1290,36 +1290,62 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 }
 
 /* ================= glass bubble cursor ================= */
-/* The real cursor is hidden wherever it is only decorative. It is kept wherever
-   its shape carries information -- grab on a clip, ew-resize on a trim handle,
-   crosshair on the watermark stage, the I-beam in a field. cursor.js reads the
-   computed value on hover and hides the bubble wherever the real one survives,
-   so the two are never on screen together and this list stays the only list. */
-.gcur-on, .gcur-on *{ cursor:none; }
+/* WHERE THE REAL CURSOR SURVIVES
+   This is one declaration on the root rather than a universal selector, and the
+   difference matters: cursor is an inherited property, so `.gcur-on *` was
+   forcing none onto the spans inside a button and the two spans inside the
+   logo -- which is why no arrow showed on their text. With inheritance instead,
+   anything that declares a cursor passes it down to its children for free, and
+   anything that declares none of its own quietly inherits none and gets the
+   bubble. cursor.js reads the computed value on hover and withdraws the bubble
+   wherever a real cursor survives, so the two are never on screen together. */
+.gcur-on{ cursor:none; }
 
-.gcur-on .wmstage canvas{ cursor:crosshair; }
-.gcur-on .poolitem,
+/* The bubble is for travelling across the page, not for pointing at things.
+   Anything clickable, and every image, hands the ordinary arrow back -- on all
+   pages. Children need no rules of their own; they inherit these. */
+.gcur-on a,
+.gcur-on button,
+.gcur-on summary,
+.gcur-on label,
+.gcur-on select,
+.gcur-on img,
+.gcur-on [role="button"],
+.gcur-on [data-go],
+.gcur-on [data-scroll],
+.gcur-on .toolcard,
+.gcur-on .tool,
+.gcur-on .drop,
+.gcur-on .toggle,
+.gcur-on .chip,
+.gcur-on .cdot,
+.gcur-on .pstar,
+.gcur-on .atab,
+.gcur-on .cnav,
+.gcur-on .lbnav,
+.gcur-on .authclose,
+.gcur-on .chatclose{ cursor:default; }
+
+/* Two rules in this sheet out-specify a bare tag selector, so they are named in
+   full rather than left to win by accident. */
+.gcur-on .navmenu .mitem{ cursor:default; }
+.gcur-on .shot.carousel .cslide,
+.gcur-on .shot.carousel .cslide.prev,
+.gcur-on .shot.carousel .cslide.next,
+.gcur-on .shot.carousel .cslide.active{ cursor:default; }
+
+/* Kept: shapes that carry information the arrow cannot. */
+.gcur-on input, .gcur-on textarea, .gcur-on [contenteditable]{ cursor:auto; }
+.gcur-on input[type="range"]{ cursor:pointer; }
+.gcur-on button:disabled{ cursor:not-allowed; }
+.gcur-on .poolitem{ cursor:grab; }
+.gcur-on .poolitem:active{ cursor:grabbing; }
 .gcur-on .clip{ cursor:grab; }
-.gcur-on .poolitem:active,
 .gcur-on .clip:active{ cursor:grabbing; }
 .gcur-on .clip .grip{ cursor:ew-resize; }
-.gcur-on .lightbox{ cursor:zoom-out; }
-.gcur-on .shot.carousel .cslide.active{ cursor:zoom-in; }
-.gcur-on input, .gcur-on textarea, .gcur-on select,
-.gcur-on [contenteditable]{ cursor:auto; }
-.gcur-on input[type="range"]{ cursor:pointer; }
+.gcur-on .wmstage canvas{ cursor:crosshair; }
+.gcur-on .lightbox{ cursor:zoom-out; }   /* says that a click dismisses it */
 .gcur-on video[controls]{ cursor:auto; }
-.gcur-on button:disabled{ cursor:not-allowed; }
-
-/* In the nav bar the ordinary arrow comes back on anything clickable, so the
-   bar behaves like a normal chrome strip. cursor.js sees a computed cursor
-   other than none and withdraws the bubble on its own. */
-.gcur-on #nav a,
-.gcur-on #nav button{ cursor:default; }
-
-/* Same for the collection cards on the landing page: they are large targets
-   and the ordinary arrow reads better on them than a bubble. */
-.gcur-on #tools .toolcard{ cursor:default; }
 
 /* the wrapper carries no size: it is just the point the ball hangs from */
 .gcur{
