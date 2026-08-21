@@ -1326,17 +1326,21 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .gcur-on .authclose,
 .gcur-on .chatclose{ cursor:default; }
 
-/* Card-shaped blocks take the arrow across their whole face, clickable or not.
-   A capability card holds text on one side and a demo or picture on the other;
-   letting the image half answer with an arrow while the text half kept the
-   bubble made one card feel like two. Children inherit, so naming the container
-   is enough. The treadmill band is left out on purpose -- it is a moving
-   backdrop rather than a card, so travelling over it still ripples. */
-.gcur-on .feature,
+/* Boxes take the arrow across their whole face, clickable or not. The test is
+   whether the thing is visibly bounded -- it has a border or a panel background,
+   so it reads as an object you point at. Children inherit, so naming the
+   container is enough.
+
+   Prose does NOT qualify, and that is the important half of this rule. A
+   capability row is copy beside a picture with no box around it, so its heading,
+   paragraph and facts all keep the bubble and ripple as you read across them.
+   Only the picture beside them is a box. Same for the treadmill band and every
+   section heading: descriptive text is travelled over, not pointed at. */
+.gcur-on .shot,
 .gcur-on .fbcell,
 .gcur-on .plan,
-.gcur-on .soonrow,
-.gcur-on .pnotice{ cursor:default; }
+.gcur-on .pnotice,
+.gcur-on .soonmark{ cursor:default; }
 
 /* Two rules in this sheet out-specify a bare tag selector, so they are named in
    full rather than left to win by accident. */

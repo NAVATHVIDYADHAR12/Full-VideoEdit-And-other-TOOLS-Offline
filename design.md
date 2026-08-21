@@ -312,11 +312,11 @@ One line, and the entire class of bug disappears.
 .gcur-on .cnav, .gcur-on .lbnav, .gcur-on .authclose,
 .gcur-on .chatclose{ cursor:default; }
 
-/* Card faces take the arrow whether clickable or not. A capability card holds
-   copy on one side and a picture on the other; if only the image answered with
-   an arrow, one card would feel like two. */
-.gcur-on .feature, .gcur-on .fbcell, .gcur-on .plan,
-.gcur-on .soonrow, .gcur-on .pnotice{ cursor:default; }
+/* Boxes take the arrow whether clickable or not. The test is whether the thing
+   is visibly bounded -- a border or a panel background -- so it reads as an
+   object you point at rather than prose you read across. */
+.gcur-on .shot, .gcur-on .fbcell, .gcur-on .plan,
+.gcur-on .pnotice, .gcur-on .soonmark{ cursor:default; }
 
 /* Two rules in this sheet out-specify a bare tag selector, so name them in full
    rather than letting them win by accident. */
@@ -338,8 +338,19 @@ One line, and the entire class of bug disappears.
 .gcur-on video[controls]{ cursor:auto; }
 ```
 
-**What still gets the bubble:** body copy, section backgrounds, the hero, the
-treadmill band — the open space you travel across. That is the whole point.
+**What still gets the bubble:** all descriptive text, section backgrounds, the
+hero, the treadmill band — everything you travel across rather than point at.
+
+**The prose test is the hard part, and it is easy to get backwards.** A
+capability row is copy beside a picture with no box drawn around it, so its
+heading, paragraph and facts list must all ripple; only the picture beside them
+is a box. A tool card, by contrast, has a panel background, so its descriptive
+`<small>` takes the arrow along with the rest of the card. The deciding question
+is never "is this text?" but "is this text inside something visibly bounded?"
+
+Two components exist that look like cards and are not: `.feature` and `.soonrow`
+have padding and, at most, a top rule — no border, no background. Both were
+briefly given the arrow and both were wrong.
 
 **Verify by resolving the cascade, not by eye.** Write a throwaway script that
 parses both stylesheets in load order, computes specificity properly, and reports
@@ -773,8 +784,10 @@ Design is not done until every line passes.
 - [ ] In-page links work while a tool panel is open.
 - [ ] Reveals fire once, never replay.
 - [ ] Reduced motion resolves everything instantly and injects no cursor.
-- [ ] Cursor: bubble on open space; arrow on every button, link, card and image,
+- [ ] Cursor: arrow on every button, link, image, and visibly bounded box,
       **including their inner text**.
+- [ ] Cursor: bubble on all descriptive text that is not inside a box — hero
+      copy, section headings, capability headings, paragraphs and facts lists.
 - [ ] Cursor: `grab`, `ew-resize`, `crosshair`, I-beam and `not-allowed` all
       survive in the tool UI.
 - [ ] Wave runs on the landing page only, and stops when a tool panel opens.
