@@ -1645,3 +1645,24 @@ html:not(.js-anim) .mln > span{ opacity:1 !important; transform:none !important;
 /* A masked heading no longer fades as a block, so it loses the stage delay it
    used to inherit: this puts it back behind its eyebrow. */
 .sechead h2{ --ld:140ms; }
+
+/* ---------- the lede coming apart ----------
+   Words stay whole so the paragraph still wraps on spaces; only the letters
+   inside them are addressable. Each glyph leaves downward and slightly blurred,
+   which reads as being absorbed by the footage rather than switched off. */
+.lede.is-split .wd{ display:inline-block; white-space:nowrap; }
+.lede.is-split .ch{
+  display:inline-block;
+  transition:opacity .5s var(--eo2), transform .5s var(--eo2), filter .5s var(--eo2);
+  /* deliberately no will-change: there are ~176 of these, and promoting every
+     one of them would ask the compositor for 176 layers to save nothing */
+}
+.lede.is-split .ch.gone{
+  opacity:0;
+  transform:translateY(10px) scale(.94);
+  filter:blur(3px);
+}
+@media (prefers-reduced-motion:reduce){
+  .lede.is-split .ch{ opacity:1 !important; transform:none !important;
+    filter:none !important; transition:none !important; }
+}

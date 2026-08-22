@@ -10,6 +10,9 @@
 const FRAME_COUNT = 80;
 const framePath = i => 'assets/hero/f' + String(i).padStart(3, '0') + '.jpg';
 
+const reducedMotion = !!(window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
 const nav      = document.getElementById('nav');
 const navLinks = document.getElementById('navlinks');
 const navToggle= document.getElementById('navtoggle');
@@ -107,6 +110,67 @@ document.querySelectorAll('a[data-scroll]').forEach(a => {
   });
 });
 
+/* ================= the dissolving lede =================
+ * The copy used to fade out as one block while the frames took over. Taking it
+ * away a letter at a time, from the end backwards, makes the hero feel like it
+ * is being consumed by the footage rather than merely dimmed.
+ *
+ * Letters are wrapped individually but words are kept whole, so the paragraph
+ * still wraps on spaces the way any other text does. Reverse document order is
+ * what produces "from the bottom": the last line goes first, unravelling from
+ * its end, and the sentence retreats upward toward the headline.
+ */
+const lede = hero && hero.querySelector('.lede');
+let glyphs = [];          // reverse order: [0] is the last letter on the page
+let hiddenCount = -1;
+
+function splitLede(){
+  if (!lede || reducedMotion) return;
+  const text = lede.textContent.replace(/\s+/g, ' ').trim();
+  if (!text) return;
+
+  const frag = document.createDocumentFragment();
+  text.split(' ').forEach((word, i, all) => {
+    const w = document.createElement('span');
+    w.className = 'wd';
+    for (const ch of word){
+      const c = document.createElement('span');
+      c.className = 'ch';
+      c.textContent = ch;
+      w.appendChild(c);
+    }
+    frag.appendChild(w);
+    // a real space between words, so wrapping stays the browser's job
+    if (i < all.length - 1) frag.appendChild(document.createTextNode(' '));
+  });
+
+  lede.textContent = '';
+  lede.appendChild(frag);
+  lede.classList.add('is-split');
+  glyphs = [].slice.call(lede.querySelectorAll('.ch')).reverse();
+}
+
+/* Where in the scrub the sentence comes apart. It finishes before the block
+   fade at .60 takes the headline, so the two never run at once. */
+const DISSOLVE_FROM = 0.12, DISSOLVE_TO = 0.55;
+
+function dissolve(progress){
+  if (!glyphs.length) return;
+  const t = (progress - DISSOLVE_FROM) / (DISSOLVE_TO - DISSOLVE_FROM);
+  const want = Math.round(Math.min(1, Math.max(0, t)) * glyphs.length);
+  if (want === hiddenCount) return;
+
+  /* Only the letters that actually changed are touched. Writing a style to
+     every glyph on every frame would be a few hundred writes per frame for a
+     handful of visible changes. */
+  if (want > hiddenCount){
+    for (let i = Math.max(0, hiddenCount); i < want; i++) glyphs[i].classList.add('gone');
+  } else {
+    for (let i = hiddenCount - 1; i >= want; i--) glyphs[i].classList.remove('gone');
+  }
+  hiddenCount = want;
+}
+
 /* ================= scroll-scrubbed frames ================= */
 const images = new Array(FRAME_COUNT).fill(null);
 let ctx = null, lastDrawn = -1, ticking = false;
@@ -148,7 +212,8 @@ function update(){
   if (i !== lastDrawn){ lastDrawn = i; draw(i); }
 
   hero.classList.toggle('scrolled', progress > 0.02);
-  // the words step aside for the footage as the sequence plays out
+  // the sentence comes apart first, then what is left steps aside
+  dissolve(progress);
   if (heroInner){
     const fade = progress < 0.6 ? 1 : Math.max(0, 1 - (progress - 0.6) / 0.28);
     heroInner.style.opacity = fade.toFixed(3);
@@ -186,6 +251,7 @@ if (canvas){
   preload();
 }
 
+splitLede();
 window.addEventListener('scroll', onScroll, { passive:true });
 window.addEventListener('resize', () => { lastDrawn = -1; update(); }, { passive:true });
 onScroll();
@@ -203,8 +269,7 @@ document.querySelectorAll('.btrack').forEach(track => {
  * Not one-shot: the class comes off again once a block has fully left, so the
  * sequence replays every time you scroll back to it.
  */
-const reduced = window.matchMedia &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduced = reducedMotion;
 
 /* ---- masked headings ----------------------------------------------------
  * Wrapping each line in its own clipped box lets it rise out from behind an
