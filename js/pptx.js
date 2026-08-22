@@ -7,6 +7,19 @@
  * slide maps onto a PDF page almost directly: convert EMU to points, walk the
  * shape tree, and draw. That is what this file does, with pdf-lib.
  *
+ * HOW POWERPOINT ACTUALLY COMPOSES A SLIDE
+ * A slide is the top layer of three. The master carries the background and the
+ * furniture -- colour bands, rules, logos. The layout adds its own on top. The
+ * slide adds the content. Render only the slide and you get text floating on
+ * white: no background, no colour boxes, and text in whatever colour the run
+ * happened to state. This file draws all three layers in order, which is what
+ * PowerPoint does, and honours showMasterSp when a slide opts out.
+ *
+ * Colour is inherited the same way. A run with no colour of its own takes it
+ * from the layout placeholder's list style, then the master's txStyles, then
+ * the theme. A shape with no fill of its own may take one from its <p:style>
+ * fillRef. Reading only what the slide states leaves almost everything black.
+ *
  * WHAT IT HANDLES
  *   - true slide size and aspect ratio, one PDF page per slide
  *   - text boxes: runs, point sizes, bold, italic, colour, alignment, wrapping,
@@ -138,6 +151,55 @@ function hexToRgb(h){
   return { r: ((n>>16)&255)/255, g: ((n>>8)&255)/255, b: (n&255)/255 };
 }
 
+/** A gradient cannot be drawn as one, so take the stop nearest the middle:
+    it reads closer to the overall impression than either extreme. */
+function gradColor(grad, theme){
+  if (!grad) return null;
+  const stops = findAll(grad, 'a', 'gs');
+  if (!stops.length) return null;
+  let best = stops[0], bestD = 1e9;
+  for (const gs of stops){
+    const pos = num(gs, 'pos', 0) / 1000;
+    const d = Math.abs(pos - 50);
+    if (d < bestD){ bestD = d; best = gs; }
+  }
+  return colorOf(best, theme);
+}
+
+/** The fill for a shape: what it states, else what its style points at. */
+function fillOf(spPr, style, theme){
+  if (kid(spPr, 'a', 'noFill')) return null;
+  const solid = kid(spPr, 'a', 'solidFill');
+  if (solid) return colorOf(solid, theme);
+  const grad = kid(spPr, 'a', 'gradFill');
+  if (grad) return gradColor(grad, theme);
+  if (kid(spPr, 'a', 'blipFill') || kid(spPr, 'a', 'pattFill')) return null;
+  // no fill stated at all -> the shape's style reference decides
+  const ref = style ? kid(style, 'a', 'fillRef') : null;
+  if (ref && num(ref, 'idx', 0) > 0) return colorOf(ref, theme);
+  return null;
+}
+
+/** The background of a slide, layout or master part. */
+function bgFillOf(doc, theme){
+  if (!doc) return null;
+  const bg = find(doc, 'p', 'bg');
+  if (!bg) return null;
+  const bgPr = kid(bg, 'p', 'bgPr');
+  if (bgPr){
+    if (kid(bgPr, 'a', 'noFill')) return null;
+    const solid = kid(bgPr, 'a', 'solidFill');
+    if (solid) return colorOf(solid, theme);
+    const grad = kid(bgPr, 'a', 'gradFill');
+    if (grad) return gradColor(grad, theme);
+    return null;                        // picture background: cannot reproduce
+  }
+  // <p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef>
+  const ref = kid(bg, 'p', 'bgRef');
+  if (ref) return colorOf(ref, theme);
+  return null;
+}
+
 /** theme1.xml -> { dk1, lt1, accent1..6, hlink, ... } as hex strings */
 function themeColors(doc){
   const out = {};
@@ -171,6 +233,53 @@ function toWinAnsi(s, dropped){
     else { out += '?'; if (dropped) dropped.n++; }
   }
   return out;
+}
+
+/* ================= inherited text styling ================= */
+/* The master's <p:txStyles> is where a placeholder's real size, weight and
+   colour live. A run that states none of its own inherits from here, by
+   placeholder family and outline level. Without this every line comes out
+   12pt black, which on a dark background is invisible. */
+function txStylesOf(masterDoc){
+  const out = { title: [], body: [], other: [] };
+  if (!masterDoc) return out;
+  const styles = find(masterDoc, 'p', 'txStyles');
+  if (!styles) return out;
+  const grab = (tag, into) => {
+    const node = kid(styles, 'p', tag);
+    if (!node) return;
+    for (let i = 1; i <= 9; i++){
+      const lvl = kid(node, 'a', 'lvl' + i + 'pPr');
+      const def = lvl ? kid(lvl, 'a', 'defRPr') : null;
+      into[i - 1] = def ? {
+        size: def.hasAttribute('sz') ? num(def, 'sz', 1800) / 100 : null,
+        bold: attr(def, 'b') === '1',
+        ital: attr(def, 'i') === '1',
+        col : colorOf(kid(def, 'a', 'solidFill'), null),   // theme applied later
+        colNode: kid(def, 'a', 'solidFill'),
+        align: lvl ? attr(lvl, 'algn', null) : null,
+      } : null;
+    }
+  };
+  grab('titleStyle', out.title);
+  grab('bodyStyle',  out.body);
+  grab('otherStyle', out.other);
+  return out;
+}
+
+/** Which family of master style applies to this shape. */
+function styleFamily(sp){
+  const ph = find(sp, 'p', 'ph');
+  if (!ph) return 'other';
+  const t = attr(ph, 'type', 'body');
+  return (t === 'title' || t === 'ctrTitle') ? 'title'
+       : (t === 'sldNum' || t === 'ftr' || t === 'dt') ? 'other' : 'body';
+}
+
+/** A placeholder's own list style on the layout, which beats the master. */
+function lstStyleOf(sp){
+  const tx = kid(sp, 'p', 'txBody');
+  return tx ? kid(tx, 'a', 'lstStyle') : null;
 }
 
 /* ================= geometry ================= */
@@ -310,15 +419,35 @@ async function toPdf(bytes, opt, onProg){
     const phMaster = placeholderMap(masterDoc);
 
     const page = pdf.addPage([SW, SH]);
-    const ctx = { pdf, page, rgb, degrees, F, files, rels, partName, theme,
-                  phLayout, phMaster, SW, SH, notes, imgCache };
+    const txStyles = txStylesOf(masterDoc);
+    const base = { pdf, page, rgb, degrees, F, theme, files,
+                   phLayout, phMaster, SW, SH, notes, imgCache, txStyles };
 
-    /* background: slide, else layout, else master */
-    const bg = bgColor(doc, theme) || bgColor(layoutDoc, theme) || bgColor(masterDoc, theme);
+    /* Background, most specific first: the slide may override the layout,
+       which may override the master. */
+    const bg = bgFillOf(doc, theme) || bgFillOf(layoutDoc, theme) || bgFillOf(masterDoc, theme);
     if (bg) page.drawRectangle({ x:0, y:0, width:SW, height:SH, color: rgb(bg.r, bg.g, bg.b) });
 
-    const tree = find(doc, 'p', 'spTree');
-    if (tree) await walk(tree, ctx, { dx:0, dy:0, sx:1, sy:1 });
+    /* THE THREE LAYERS, bottom to top. The master's and layout's own shapes are
+       the design furniture -- bands, rules, logos -- and are what makes a deck
+       look like itself. Their placeholders are only prototypes and hold prompt
+       text, so those are skipped; the slide supplies the real content. */
+    const showMaster = attr(doc.documentElement, 'showMasterSp', '1') !== '0';
+    const layers = [];
+    if (showMaster && masterDoc) layers.push([masterDoc, masterPart]);
+    if (showMaster && layoutDoc) layers.push([layoutDoc, layoutPart]);
+    layers.push([doc, partName]);
+
+    for (const [part, name] of layers){
+      const tree = find(part, 'p', 'spTree');
+      if (!tree) continue;
+      const ctx = Object.assign({}, base, {
+        rels: name === partName ? rels : relsFor(files, name),
+        partName: name,
+        skipPh: name !== partName,      // only the slide's placeholders hold content
+      });
+      await walk(tree, ctx, { dx:0, dy:0, sx:1, sy:1 });
+    }
 
     prog((i + 1) / order.length);
     if (i % 4 === 3 && root.Core && root.Core.idle) await root.Core.idle();
@@ -331,14 +460,6 @@ async function toPdf(bytes, opt, onProg){
     width: SW, height: SH,
     notes,
   };
-}
-
-function bgColor(doc, theme){
-  if (!doc) return null;
-  const bg = find(doc, 'p', 'bg');
-  if (!bg) return null;
-  const solid = find(bg, 'a', 'solidFill');
-  return solid ? colorOf(solid, theme) : null;
 }
 
 /* ================= walking the shape tree ================= */
@@ -400,21 +521,29 @@ function boxFor(sp, ctx){
 }
 
 async function drawShape(sp, ctx, T){
+  // On the master and layout, a placeholder is a prototype holding prompt text
+  // ("Click to edit Master title style"), never content. Skip those; draw the
+  // ordinary shapes, which are the design furniture.
+  if (ctx.skipPh && find(sp, 'p', 'ph')) return;
+
   const spPr = kid(sp, 'p', 'spPr');
+  const style = kid(sp, 'p', 'style');
   const box = boxFor(sp, ctx);
   if (!box) return;
   const R = place(box, ctx, T);
   if (R.w <= 0 || R.h <= 0) return;
 
-  /* fill */
-  const noFill = find(spPr, 'a', 'noFill');
-  const solid  = kid(spPr, 'a', 'solidFill');
-  const fill   = (!noFill && solid) ? colorOf(solid, ctx.theme) : null;
+  /* fill: what the shape states, else what its style reference points at */
+  const fill = fillOf(spPr, style, ctx.theme);
 
-  /* outline */
+  /* outline, same idea */
   const ln = kid(spPr, 'a', 'ln');
   const lnNoFill = ln ? kid(ln, 'a', 'noFill') : null;
-  const stroke = (ln && !lnNoFill) ? colorOf(kid(ln, 'a', 'solidFill'), ctx.theme) : null;
+  let stroke = (ln && !lnNoFill) ? colorOf(kid(ln, 'a', 'solidFill'), ctx.theme) : null;
+  if (!stroke && !lnNoFill && style){
+    const lr = kid(style, 'a', 'lnRef');
+    if (lr && num(lr, 'idx', 0) > 0) stroke = colorOf(lr, ctx.theme);
+  }
   const lw = ln ? Math.max(0.4, num(ln, 'w', 9525) / PT) : 0.75;
 
   const prst = attr(find(spPr, 'a', 'prstGeom'), 'prst', 'rect');
@@ -436,7 +565,7 @@ async function drawShape(sp, ctx, T){
   }
 
   const tx = kid(sp, 'p', 'txBody');
-  if (tx) drawText(tx, R, ctx, sp);
+  if (tx) drawText(tx, R, ctx, sp, null, style);
 }
 
 async function drawPicture(pic, ctx, T){
@@ -506,7 +635,7 @@ async function drawFrame(fr, ctx, T){
       ctx.page.drawRectangle({ x, y:cy, width:w, height:rowH,
         borderColor: ctx.rgb(.72,.72,.72), borderWidth:0.5 });
       const tx = kid(tc, 'a', 'txBody');
-      if (tx) drawText(tx, { x:x+3, y:cy, w:w-6, h:rowH, top:y }, ctx, null, 9);
+      if (tx) drawText(tx, { x:x+3, y:cy, w:w-6, h:rowH, top:y }, ctx, null, 9, null);
       x += w; ci++;
     }
     y += rowH;
@@ -515,17 +644,52 @@ async function drawFrame(fr, ctx, T){
 
 /* ================= text ================= */
 
-/** Default point size when neither run nor layout says one. */
-function defaultSize(sp){
-  if (!sp) return 12;
-  const ph = find(sp, 'p', 'ph');
-  const type = ph ? attr(ph, 'type', 'body') : 'body';
-  if (type === 'ctrTitle' || type === 'title') return 36;
-  if (type === 'subTitle') return 20;
-  return 18;
+/* What a run should look like when it states nothing itself. Most efficient
+   source first: the shape's own list style, then the layout placeholder's,
+   then the master's txStyles for that family, then a plain fallback. */
+function inherited(ctx, sp, lvl, style){
+  const out = { size: 18, bold: false, ital: false, col: null, align: null };
+  if (!sp) { out.size = 12; return out; }
+
+  const fam = styleFamily(sp);
+  const m = ctx.txStyles && ctx.txStyles[fam] && ctx.txStyles[fam][lvl];
+  if (m){
+    if (m.size) out.size = m.size;
+    out.bold = m.bold; out.ital = m.ital; out.align = m.align;
+    if (m.colNode) out.col = colorOf(m.colNode, ctx.theme);
+  } else {
+    const ph = find(sp, 'p', 'ph');
+    const t = ph ? attr(ph, 'type', 'body') : '';
+    out.size = (t === 'title' || t === 'ctrTitle') ? 36 : (t === 'subTitle') ? 20 : 18;
+  }
+
+  /* the shape's own list style, if it carries one, wins over the master */
+  const lst = lstStyleOf(sp);
+  if (lst){
+    const lvlPr = kid(lst, 'a', 'lvl' + (lvl + 1) + 'pPr');
+    const def = lvlPr ? kid(lvlPr, 'a', 'defRPr') : null;
+    if (def){
+      if (def.hasAttribute('sz')) out.size = num(def, 'sz', out.size * 100) / 100;
+      if (def.hasAttribute('b')) out.bold = attr(def, 'b') === '1';
+      const c = colorOf(kid(def, 'a', 'solidFill'), ctx.theme);
+      if (c) out.col = c;
+    }
+    if (lvlPr && lvlPr.hasAttribute('algn')) out.align = attr(lvlPr, 'algn');
+  }
+
+  /* a shape style's fontRef is the last word on colour before the theme */
+  if (!out.col && style){
+    const fr = kid(style, 'a', 'fontRef');
+    if (fr){
+      const c = colorOf(fr, ctx.theme);
+      if (c) out.col = c;
+    }
+  }
+  if (!out.col) out.col = { r: 0, g: 0, b: 0 };
+  return out;
 }
 
-function drawText(txBody, R, ctx, sp, forceSize){
+function drawText(txBody, R, ctx, sp, forceSize, style){
   const bodyPr = kid(txBody, 'a', 'bodyPr');
   const anchor = attr(bodyPr, 'anchor', 't');            // t | ctr | b
   const insL = num(bodyPr, 'lIns', 91440) / PT;
@@ -538,13 +702,16 @@ function drawText(txBody, R, ctx, sp, forceSize){
   const boxTop = R.top + insT;
   const boxH = Math.max(6, R.h - insT - insB);
 
-  const base = forceSize || defaultSize(sp);
   const lines = [];
 
   for (const p of kids(txBody, 'a', 'p')){
     const pPr = kid(p, 'a', 'pPr');
-    const align = attr(pPr, 'algn', 'l');
-    const lvl = parseInt(attr(pPr, 'lvl', '0'), 10) || 0;
+    const lvl = Math.min(8, parseInt(attr(pPr, 'lvl', '0'), 10) || 0);
+    const inh = forceSize
+      ? { size: forceSize, bold: false, ital: false, col: { r:0, g:0, b:0 }, align: null }
+      : inherited(ctx, sp, lvl, style);
+    const base = inh.size;
+    const align = attr(pPr, 'algn', inh.align || 'l');
     const buChar = kid(pPr, 'a', 'buChar');
     const buNone = kid(pPr, 'a', 'buNone');
     const indent = lvl * 16;
@@ -562,9 +729,9 @@ function drawText(txBody, R, ctx, sp, forceSize){
       const raw = t ? t.textContent : '';
       if (!raw) continue;
       const size = rPr && rPr.hasAttribute('sz') ? num(rPr, 'sz', base*100) / 100 : base;
-      const bold = attr(rPr, 'b') === '1';
-      const ital = attr(rPr, 'i') === '1';
-      const col  = colorOf(kid(rPr, 'a', 'solidFill'), ctx.theme) || { r:0, g:0, b:0 };
+      const bold = rPr && rPr.hasAttribute('b') ? attr(rPr, 'b') === '1' : inh.bold;
+      const ital = rPr && rPr.hasAttribute('i') ? attr(rPr, 'i') === '1' : inh.ital;
+      const col  = colorOf(kid(rPr, 'a', 'solidFill'), ctx.theme) || inh.col;
       segs.push({ text: toWinAnsi(raw, ctx.notes.dropped), size, bold, ital, col });
     }
 
@@ -574,6 +741,7 @@ function drawText(txBody, R, ctx, sp, forceSize){
     }
     if (segs.length) flush();
     else lines.push({ segs: [], height: base * 1.2, align, indent });   // blank line
+    void 0;
   }
 
   if (!lines.length) return;
