@@ -157,16 +157,28 @@ soft and usable. Do not mix the two vocabularies on one surface.
 
 ## Part 4 — Motion
 
-**One curve.** `cubic-bezier(.22,.61,.36,1)` is used in roughly thirty places and
-is the house easing. It decelerates hard, which reads as heavy and expensive. Do
-not introduce a second curve without a reason you can articulate. (Two
-exceptions exist: `cubic-bezier(.5,0,.5,1)` for a symmetric loop, and
-`cubic-bezier(.34,1.4,.64,1)` for the one element that overshoots.)
+**One curve, plus one for arrivals.** `cubic-bezier(.22,.61,.36,1)` is the house
+easing, used in roughly thirty places. It decelerates hard, which reads as heavy
+and expensive. A second curve, `cubic-bezier(.16,1,.30,1)`, is reserved for
+*arrivals* — the load overture, masked lines, sequenced grids. Its tail is
+longer: the element covers most of its distance early and then takes its time
+settling, which is what separates an entrance that looks deliberate from one
+that merely looks quick. Hover and state changes keep the house curve.
 
-**Durations.** Hover feedback `.25–.35s`. Entrances `.45–.7s`. Layout and
-backdrop changes `.5s`. One deliberate outlier: the picture side of a capability
-card runs `.95s` so it always settles after the words. Past a second, motion
-stops reading as considered and starts reading as broken.
+Both are tokens, `--eo` and `--eo2`. The two older exceptions remain
+(`cubic-bezier(.5,0,.5,1)` for a symmetric loop, `cubic-bezier(.34,1.4,.64,1)`
+for the one element that overshoots). Reach for a fifth curve only with a reason
+you can write down in a comment.
+
+**Durations.** Hover feedback `.25–.35s`. Layout and backdrop changes `.5s`.
+Ordinary entrances `.45–.7s`. One deliberate outlier: the picture side of a
+capability card runs `.95s` so it always settles after the words.
+
+Arrivals are the exception and may run long, because they happen once and are
+the first thing anyone sees: a masked line rises over `1.15s`, the counters climb
+for `1.6s`, the whole opening resolves by about `2.5s`. The rule that still holds
+is about *repeatable* motion — anything a reader can trigger twice must stay
+under a second, or it stops reading as considered and starts reading as broken.
 
 **What may animate.** `opacity`, `transform`, `filter`, `border-color`,
 `box-shadow`, `backdrop-filter`. Never animate `width`, `height`, `top`, `left`
@@ -486,18 +498,18 @@ else running = false;
 
 ## Part 7 — Scroll reveals
 
-Two attributes, one observer. `data-reveal` marks a block; `data-stage` numbers
-the children so they arrive in sequence.
+Four attributes, one observer. `data-reveal` marks a block. `data-stage` numbers
+the children of a block so they arrive in sequence. `data-seq` says *the children
+are alike, walk them in one at a time*. `.mln` wraps a line of a heading so it can
+rise out from behind an edge.
 
 ```css
-[data-reveal]{ opacity:0; transform:translateY(16px);
-  transition:opacity .7s cubic-bezier(.22,.61,.36,1),
-             transform .7s cubic-bezier(.22,.61,.36,1); }
+[data-reveal]{ opacity:0; transform:translateY(var(--rv, 16px));
+  transition:opacity .9s var(--eo), transform .9s var(--eo); }
 [data-reveal].in{ opacity:1; transform:none; }
 
-[data-stage]{ opacity:0; transform:translateY(14px);
-  transition:opacity .6s cubic-bezier(.22,.61,.36,1),
-             transform .6s cubic-bezier(.22,.61,.36,1); }
+[data-stage]{ opacity:0; transform:translateY(var(--rv, 15px));
+  transition:opacity .85s var(--eo), transform .85s var(--eo); }
 [data-reveal].in [data-stage],
 [data-reveal].in[data-stage]{ opacity:1; transform:none; }
 
@@ -505,30 +517,108 @@ the children so they arrive in sequence.
 [data-stage="2"]{ transition-delay:150ms }
 [data-stage="3"]{ transition-delay:300ms }
 [data-stage="4"]{ transition-delay:450ms }
-
-@media (prefers-reduced-motion:reduce){
-  [data-reveal],[data-stage],.shot.pop{
-    opacity:1 !important; transform:none !important; transition:none; }
-}
 ```
 
 Add `.in` with an `IntersectionObserver` configured
-`{ rootMargin:'0px 0px -10% 0px', threshold:[0, 0.08] }`, and **unobserve after
-firing** — reveals must not replay on scroll-up.
+`{ rootMargin:'0px 0px -10% 0px', threshold:[0, 0.08] }`.
+
+**Reveals replay.** Take the class off again once a block has *fully* left, and
+the sequence plays again next time it is reached. Do not unobserve after firing:
+a page whose second visit is inert feels dead on the way back up. Reset only when
+the block is properly gone — `boundingClientRect.top > innerHeight` or
+`bottom < 0` — because resetting at the edge makes it flicker.
 
 > **Only leaf elements carry a stage.** If a staged container holds staged
 > children, the parent's `opacity:0` hides children that believe they are
 > visible, and the block never appears. This was a real bug. Stage the leaves.
+
+### 7.1 Direction
+
+A block that left over the top should come back **down** from the top. Rising
+from below on the way up is the tell of a cheap reveal: it contradicts the
+reader's own movement.
+
+Record the side it exited on as it goes, and let CSS read the sign back:
+
+```js
+function park(el, sign){
+  el.style.setProperty('--rv',  (sign * 16)  + 'px');
+  el.style.setProperty('--mln', (sign * 112) + '%');
+}
+// left below: it will rise.   left above: it will descend.
+```
+
+`--rv` is set on the reveal container only. Custom properties inherit, so every
+`[data-stage]`, every `[data-seq]` child and every masked line inside it follows
+without any of them knowing that scrolling exists. That inheritance is the whole
+trick — do not set the sign per element.
+
+### 7.2 Masked lines
+
+Headings rise out from behind an edge rather than fading in place. This is the
+single gesture that most separates an expensive page from a template.
+
+```css
+.mln{ display:block; overflow:hidden;
+      padding-bottom:.14em; margin-bottom:-.14em; }
+.mln > span{ display:block; opacity:0;
+  transform:translateY(var(--mln, 112%));
+  transition:transform 1.15s var(--eo2), opacity .85s var(--eo2);
+  transition-delay:calc(var(--ld, 0ms) + var(--i, 0) * 110ms); }
+[data-reveal].in .mln > span{ transform:none; opacity:1; }
+.is-masked{ opacity:1 !important; transform:none !important; }
+```
+
+- The `padding-bottom` / negative `margin-bottom` pair is not optional. Without
+  it the very `overflow:hidden` that creates the effect clips descenders and the
+  italic gold.
+- Split in **script**, not in markup, on `<br>`. The HTML stays readable and a
+  script failure leaves ordinary headings.
+- `.is-masked` stops the heading itself from moving: its lines do the work now,
+  so it must not also fade as a block.
+- A masked heading loses the stage delay it used to inherit. Give it back with
+  `--ld` (`.sechead h2{ --ld:140ms }`) or it will race its own eyebrow.
+
+### 7.3 Sequenced children
+
+One trigger, but the children land one after another. Stamp an index on each
+child in script and a single rule serves any number of them:
+
+```css
+[data-reveal][data-seq]{ opacity:1; transform:none; }   /* the box holds still */
+[data-seq] > *{ opacity:0; transform:translateY(var(--rv, 26px));
+  transition:opacity .8s var(--eo2), transform .8s var(--eo2);
+  transition-delay:calc(var(--i, 0) * var(--step, 85ms)); }
+[data-seq].in > *{ opacity:1; transform:none; }
+```
+
+The container must not fade, or it would hide the children it is staggering —
+the same trap as P3, arriving by a different road. Tune the gap with `--step`:
+`110ms` for four stat boxes, `58ms` for twelve tool cards. The more items, the
+tighter the gap; a long grid on a lazy stagger feels like waiting.
+
+### 7.4 Counting numerals
+
+A printed figure reads as a claim. A figure you watch climb reads as a
+measurement. Count from zero on `easeOutExpo` over `1.6s`.
+
+- **Land on the authored text**, not on whatever the easing rounded to. Parse the
+  number and suffix out of the existing markup, and write the original string
+  back on the final frame.
+- Keep the suffix, so `100%` still ends in a percent sign.
+- `font-variant-numeric: tabular-nums`, or the box reflows on every frame.
+- **Leave zero alone.** Counting up to nothing is a non-event, and on this page
+  the zero is `0 bytes uploaded` — the one number that is the entire argument.
+  Animating it would undercut it.
+- Re-run on re-entry, like every other reveal.
 
 The picture side of a card gets a heavier entrance:
 
 ```css
 .shot.pop{
   opacity:0; transform:scale(.965) translateY(18px); filter:blur(6px);
-  transition:opacity .95s cubic-bezier(.22,.61,.36,1),
-             transform .95s cubic-bezier(.22,.61,.36,1),
-             filter .95s cubic-bezier(.22,.61,.36,1),
-             border-color .5s ease, box-shadow .5s ease;
+  transition:opacity .95s var(--eo), transform .95s var(--eo),
+             filter .95s var(--eo), border-color .5s ease, box-shadow .5s ease;
   transition-delay:450ms;
 }
 [data-reveal].in .shot.pop{ opacity:1; transform:none; filter:blur(0); }
@@ -536,6 +626,29 @@ The picture side of a card gets a heavier entrance:
 
 It is slower than everything else (`.95s`) and starts last (`450ms`), so the
 picture always settles after the words. That ordering is deliberate.
+
+### 7.5 Reduced motion, and the no-script floor
+
+Every rule above is opt-in behind a class the document sets on itself, in an
+inline script in the `<head>`, before first paint:
+
+```html
+<script>document.documentElement.classList.add("js-anim");</script>
+```
+
+```css
+html:not(.js-anim) [data-reveal],
+html:not(.js-anim) [data-stage],
+html:not(.js-anim) [data-seq] > *,
+html:not(.js-anim) .mln > span{ opacity:1 !important; transform:none !important; }
+```
+
+Hiding content and then revealing it with script means a script that never runs
+leaves a blank page. The flag inverts that risk: no script, no hiding. It must be
+inline and in the head — an external file is late enough to flash.
+
+Reduced motion resolves everything to its final state with no transition, and
+turns off the sheen, the treadmill and the scroll cue.
 
 ---
 
@@ -562,6 +675,38 @@ headline sitting over them.
   note sit in opposite corners — they make the mechanism legible and restate the
   product's argument at the same time.
 - The scroll cue must fade out as the hero scrubs, or it collides with the copy.
+
+### 8.1 The overture
+
+The hero must **arrive**. Writing `class="hero in"` into the markup so it is
+simply present when the page paints is the difference between a page that opens
+and a page that is merely already there — and it is invisible in a screenshot,
+which is how it survives review.
+
+Order, because the bar frames everything under it:
+
+| | |
+|---|---|
+| `60ms` | brand mark, scaling up from `.86` |
+| `200–320ms` | nav links, one at a time |
+| `380ms` | the call to action |
+| `420ms` | the gold rule draws downward, `scaleY(0)` from the top |
+| `520ms` | headline lines rise from their masks |
+| `900ms` / `1040ms` | lede, then buttons |
+| `1500ms` | scroll cue fades up; one sheen crosses the gold button |
+
+- **Wait for the webfonts.** `document.fonts.ready` means the headline rises
+  already set in the serif instead of swapping face mid-movement. Cap the wait at
+  `900ms` — a font that never resolves must not cost the whole opening.
+- **Do not observe the hero.** Left in the `IntersectionObserver` it takes `.in`
+  on the first frame, which lands it ahead of the nav meant to lead it and
+  defeats the font wait. The overture owns it; the observer keeps everything else.
+- The hero therefore opens **once** and does not replay on the way back to the
+  top. That is correct here: replaying it fights the scroll-scrubbed frames, and
+  a headline that re-animates every time you reach the top of the page is
+  irritating rather than luxurious.
+- The sheen across the gold button runs once, on arrival, and never again. A
+  looping shine is the fastest way to look cheap.
 
 ---
 
@@ -715,12 +860,18 @@ Do it in this order. Each step is verifiable before the next begins.
 3. **Typography.** Headings, eyebrow, lede. Check the serif italic renders.
 4. **Nav.** Static first. Then `.stuck`, then `.hidden`, then the dropdown.
    Verify `.brand + .navcta` on a page with no link group.
-5. **Reveal system.** `data-reveal` + `data-stage` + the observer. Confirm
-   reduced-motion resolves everything instantly.
+5. **Reveal system.** The `.js-anim` flag first — inline, in the head — then
+   `data-reveal` + `data-stage` + the observer. Confirm reduced-motion resolves
+   everything instantly, and that disabling script leaves the page readable.
 6. **Hero.** Sticky stage, canvas, preload, scrub. Verify the last frame is
    reachable and the cue fades.
 7. **Sections.** Capability cards, tool grid, coverflow, treadmill, footer.
-8. **Cursor.** Last, because it must be verified *against* everything above.
+8. **Motion layer.** Only once the sections exist and hold still, because every
+   piece of it is applied *to* them: masked lines, `data-seq` on the grids, the
+   counters, direction, and last the overture. Build it before the cursor and
+   after everything it animates — choreography written against a layout that is
+   still moving has to be written twice.
+9. **Cursor.** Last, because it must be verified *against* everything above.
    Root declaration, then the arrow list, then the bubble, then the wave, then
    the desktop gate. Resolve the cascade before declaring it done.
 
@@ -774,7 +925,25 @@ leaving two references behind passes the syntax check and then throws
 `ReferenceError` at runtime, on every event. After any rename or removal, grep
 for the old identifier and run the code path once.
 
-**P12 — Verify against the real cascade, not a screenshot.** Parse both sheets in
+**P12 — `overflow:hidden` clips the font, not just the box.** The masked-line
+reveal depends on overflow, and overflow will happily cut the tails off `y` and
+`g` and the lean off an italic. Pay it back with `padding-bottom:.14em;
+margin-bottom:-.14em` on every mask. It looks fine in the one heading you tested
+and wrong in the one with a descender.
+
+**P13 — A shared stylesheet without its script.** `pricing.html` and
+`tools.html` load `landing.css` and never load `landing.js`. Anything that starts
+hidden, or any pseudo-element with a margin, silently damages those pages — a
+hairline that never draws is still a 28px gap. Scope page-specific motion to
+`.js-anim`, and check every page that links the sheet, not only the one you are
+working on.
+
+**P14 — The observer fires before your load sequence does.** An element that is
+on screen at load gets its intersection callback on the first frame. Any
+choreography you intended to run after it — a font wait, a nav that leads — is
+simply skipped. Take the element out of the observer and let the sequence own it.
+
+**P15 — Verify against the real cascade, not a screenshot.** Parse both sheets in
 load order, compute specificity, model inheritance, and check both the container
 *and* its inner text node.
 
@@ -789,12 +958,22 @@ Design is not done until every line passes.
       shades that have no token (`#4d1a22`, `#E7C7B6`, `#D9938B`, `#F4D9C8`).
 - [ ] No serif heading at a weight other than 400.
 - [ ] Every heading ends in a full stop; sentence case throughout.
-- [ ] One easing curve, with any exception justified in a comment.
+- [ ] Two easing curves — house and arrival — with any third justified in a
+      comment.
 - [ ] Nav: transparent at top, frosted on scroll, hides down, returns up.
 - [ ] Nav call to action sits correctly on a page with no link group.
 - [ ] Dropdown opens on hover *and* focus; entries have real `href`s.
 - [ ] In-page links work while a tool panel is open.
-- [ ] Reveals fire once, never replay.
+- [ ] Reveals replay on re-entry, and arrive from the side the reader is
+      travelling from, not always from below.
+- [ ] The page **opens**: nav, then hero, in that order, on load — no block
+      hardcoded `in` in the markup.
+- [ ] Headings rise from masked lines, with descenders and italics uncut.
+- [ ] Grids of like items arrive one at a time, never as a block.
+- [ ] Counters climb from zero, keep their suffix, land on the authored text,
+      and leave a genuine zero alone.
+- [ ] Script disabled renders the page plainly — never blank.
+- [ ] Every page sharing the stylesheet still looks right without the script.
 - [ ] Reduced motion resolves everything instantly and injects no cursor.
 - [ ] Cursor: arrow on every button, link, image, and visibly bounded box,
       **including their inner text**.
