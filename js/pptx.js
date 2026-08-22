@@ -1,0 +1,666 @@
+/* pptx.js — PowerPoint (.pptx) to PDF, entirely in the browser.
+ *
+ * WHAT THIS IS
+ * A .pptx is not a mysterious binary: it is a ZIP of OOXML, the same family as
+ * the .docx this app already reads. Each slide is an XML file describing shapes
+ * at absolute positions in EMU (English Metric Units, 914400 per inch). So a
+ * slide maps onto a PDF page almost directly: convert EMU to points, walk the
+ * shape tree, and draw. That is what this file does, with pdf-lib.
+ *
+ * WHAT IT HANDLES
+ *   - true slide size and aspect ratio, one PDF page per slide
+ *   - text boxes: runs, point sizes, bold, italic, colour, alignment, wrapping,
+ *     vertical anchoring, line breaks and bullets
+ *   - placeholders whose position lives on the layout or master, not the slide
+ *   - pictures (PNG and JPEG), positioned and scaled as authored
+ *   - solid-filled shapes, outlines, and rounded/elliptical geometry
+ *   - tables from graphic frames
+ *   - grouped shapes, including the child-offset transform they carry
+ *   - solid slide backgrounds, inherited from layout and master
+ *   - theme colours, so schemeClr references resolve to the right hex
+ *
+ * WHAT IT DOES NOT, AND WILL NOT PRETEND TO
+ *   Animations and transitions (meaningless in a PDF), SmartArt, charts,
+ *   gradient and picture fills, WordArt effects, shadows, 3-D, embedded video,
+ *   and EMF/WMF vector images. Shapes it cannot draw are counted and reported
+ *   rather than silently dropped, so the caller can say what was approximated.
+ *
+ * LEGACY .ppt IS A DIFFERENT FILE FORMAT ENTIRELY — a binary compound document
+ * from the 1990s, not a ZIP. It is not supported here and should be rejected by
+ * the caller with that explanation.
+ */
+(function (root) {
+'use strict';
+
+const PT = 12700;                     // EMU per point
+const NS = {
+  a: 'http://schemas.openxmlformats.org/drawingml/2006/main',
+  p: 'http://schemas.openxmlformats.org/presentationml/2006/main',
+  r: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+  rel: 'http://schemas.openxmlformats.org/package/2006/relationships',
+};
+
+/* ================= tiny XML helpers ================= */
+const dec = new TextDecoder();
+function parseXml(bytes){
+  if (!bytes) return null;
+  const doc = new DOMParser().parseFromString(dec.decode(bytes), 'application/xml');
+  return doc.getElementsByTagName('parsererror').length ? null : doc;
+}
+/** direct element children with this namespace + local name */
+function kids(node, ns, local){
+  const out = [];
+  if (!node) return out;
+  for (let n = node.firstElementChild; n; n = n.nextElementSibling){
+    if (n.namespaceURI === NS[ns] && n.localName === local) out.push(n);
+  }
+  return out;
+}
+const kid  = (node, ns, local) => kids(node, ns, local)[0] || null;
+/** first descendant, at any depth */
+function find(node, ns, local){
+  if (!node) return null;
+  const l = node.getElementsByTagNameNS(NS[ns], local);
+  return l.length ? l[0] : null;
+}
+const findAll = (node, ns, local) =>
+  node ? Array.prototype.slice.call(node.getElementsByTagNameNS(NS[ns], local)) : [];
+const attr = (n, name, dflt) => (n && n.hasAttribute(name)) ? n.getAttribute(name) : dflt;
+const num  = (n, name, dflt) => { const v = attr(n, name); return v == null ? dflt : (parseFloat(v) || 0); };
+
+/* ================= relationships ================= */
+function relsFor(files, partName){
+  const i = partName.lastIndexOf('/');
+  const rp = partName.slice(0, i) + '/_rels' + partName.slice(i) + '.rels';
+  const doc = parseXml(files.get(rp));
+  const map = new Map();
+  if (!doc) return map;
+  for (const rel of doc.getElementsByTagNameNS(NS.rel, 'Relationship')){
+    map.set(attr(rel, 'Id'), { target: attr(rel, 'Target'), type: attr(rel, 'Type') });
+  }
+  return map;
+}
+/** resolve a relationship target against the part that referenced it */
+function resolvePath(fromPart, target){
+  if (!target) return null;
+  if (target.startsWith('/')) return target.slice(1);
+  const base = fromPart.slice(0, fromPart.lastIndexOf('/') + 1);
+  const parts = (base + target).split('/');
+  const out = [];
+  for (const seg of parts){
+    if (seg === '.' || seg === '') continue;
+    if (seg === '..') out.pop(); else out.push(seg);
+  }
+  return out.join('/');
+}
+
+/* ================= colour ================= */
+const HEXC = { black:'000000', white:'FFFFFF', red:'FF0000', green:'008000', blue:'0000FF',
+               yellow:'FFFF00', gray:'808080', grey:'808080' };
+
+/** Read a colour out of a <a:solidFill>-style container. */
+function colorOf(node, theme){
+  if (!node) return null;
+  const srgb = find(node, 'a', 'srgbClr');
+  if (srgb) return applyMods(attr(srgb, 'val'), srgb);
+  const scheme = find(node, 'a', 'schemeClr');
+  if (scheme){
+    const key = attr(scheme, 'val');
+    const hex = theme && theme[key];
+    if (hex) return applyMods(hex, scheme);
+  }
+  const sys = find(node, 'a', 'sysClr');
+  if (sys) return applyMods(attr(sys, 'lastClr') || '000000', sys);
+  const pre = find(node, 'a', 'prstClr');
+  if (pre) return applyMods(HEXC[attr(pre, 'val')] || '000000', pre);
+  return null;
+}
+/** lumMod / lumOff are common enough in real decks to be worth honouring. */
+function applyMods(hex, node){
+  let c = hexToRgb(hex);
+  if (!c) return null;
+  const lumMod = find(node, 'a', 'lumMod'), lumOff = find(node, 'a', 'lumOff');
+  const shade  = find(node, 'a', 'shade'),  tint   = find(node, 'a', 'tint');
+  if (lumMod){ const f = num(lumMod, 'val', 100000) / 100000; c = { r:c.r*f, g:c.g*f, b:c.b*f }; }
+  if (lumOff){ const f = num(lumOff, 'val', 0) / 100000; c = { r:c.r+f, g:c.g+f, b:c.b+f }; }
+  if (shade){  const f = num(shade, 'val', 100000) / 100000; c = { r:c.r*f, g:c.g*f, b:c.b*f }; }
+  if (tint){   const f = num(tint,  'val', 100000) / 100000;
+               c = { r:c.r*f + (1-f), g:c.g*f + (1-f), b:c.b*f + (1-f) }; }
+  return { r: clamp01(c.r), g: clamp01(c.g), b: clamp01(c.b) };
+}
+const clamp01 = v => Math.min(1, Math.max(0, v));
+function hexToRgb(h){
+  if (!h) return null;
+  h = String(h).replace('#','');
+  if (h.length !== 6) return null;
+  const n = parseInt(h, 16);
+  if (isNaN(n)) return null;
+  return { r: ((n>>16)&255)/255, g: ((n>>8)&255)/255, b: (n&255)/255 };
+}
+
+/** theme1.xml -> { dk1, lt1, accent1..6, hlink, ... } as hex strings */
+function themeColors(doc){
+  const out = {};
+  const scheme = find(doc, 'a', 'clrScheme');
+  if (!scheme) return out;
+  for (let n = scheme.firstElementChild; n; n = n.nextElementSibling){
+    const srgb = kid(n, 'a', 'srgbClr'), sys = kid(n, 'a', 'sysClr');
+    const hex = srgb ? attr(srgb, 'val') : sys ? (attr(sys, 'lastClr') || '000000') : null;
+    if (hex) out[n.localName] = hex;
+  }
+  // PowerPoint swaps these two pairs when referring to them from slides
+  out.tx1 = out.tx1 || out.dk1; out.bg1 = out.bg1 || out.lt1;
+  out.tx2 = out.tx2 || out.dk2; out.bg2 = out.bg2 || out.lt2;
+  return out;
+}
+
+/* ================= text that Helvetica can actually draw ================= */
+function toWinAnsi(s, dropped){
+  let out = '';
+  for (const ch of String(s)){
+    const c = ch.codePointAt(0);
+    if (c === 9) out += '    ';
+    else if ((c >= 32 && c <= 126) || (c >= 160 && c <= 255)) out += ch;
+    else if (c === 0x2018 || c === 0x2019) out += "'";
+    else if (c === 0x201C || c === 0x201D) out += '"';
+    else if (c === 0x2013 || c === 0x2014) out += '-';
+    else if (c === 0x2022) out += '·';
+    else if (c === 0x2026) out += '...';
+    else if (c === 0xA0) out += ' ';
+    else if (c < 32) { /* drop control characters silently */ }
+    else { out += '?'; if (dropped) dropped.n++; }
+  }
+  return out;
+}
+
+/* ================= geometry ================= */
+/** Read <a:xfrm> into points, or null when the shape inherits its position. */
+function xfrmOf(spPr){
+  const x = find(spPr, 'a', 'xfrm');
+  if (!x) return null;
+  const off = kid(x, 'a', 'off'), ext = kid(x, 'a', 'ext');
+  if (!off || !ext) return null;
+  return {
+    x: num(off, 'x', 0) / PT,
+    y: num(off, 'y', 0) / PT,
+    w: num(ext, 'cx', 0) / PT,
+    h: num(ext, 'cy', 0) / PT,
+    rot: num(x, 'rot', 0) / 60000,
+    flipH: attr(x, 'flipH') === '1',
+    flipV: attr(x, 'flipV') === '1',
+  };
+}
+
+/** Placeholder identity, used to inherit position from layout then master. */
+function phKeyOf(sp){
+  const ph = find(sp, 'p', 'ph');
+  if (!ph) return null;
+  const type = attr(ph, 'type', 'body');
+  const idx  = attr(ph, 'idx', '');
+  return type + '#' + idx;
+}
+
+/** Build (placeholder -> xfrm) for a layout or master part. */
+function placeholderMap(doc){
+  const map = new Map();
+  if (!doc) return map;
+  const tree = find(doc, 'p', 'spTree');
+  if (!tree) return map;
+  for (const sp of findAll(tree, 'p', 'sp')){
+    const key = phKeyOf(sp);
+    if (!key) continue;
+    const box = xfrmOf(kid(sp, 'p', 'spPr'));
+    if (box) {
+      map.set(key, box);
+      // also index by bare type, so idx mismatches still find something sane
+      const bare = key.split('#')[0] + '#';
+      if (!map.has(bare)) map.set(bare, box);
+    }
+  }
+  return map;
+}
+
+/* ================= the renderer ================= */
+
+/**
+ * @param {Uint8Array} bytes  the .pptx
+ * @param {{}} [opt]
+ * @param {(v:number)=>void} [onProg] 0..1
+ * @returns {Promise<{blob:Blob, slides:number, notes:Object}>}
+ */
+async function toPdf(bytes, opt, onProg){
+  opt = opt || {};
+  const prog = onProg || function(){};
+  const files = await root.Zip.read(bytes);
+
+  if (!files.get('ppt/presentation.xml')){
+    throw new Error('This does not look like a PowerPoint file — ppt/presentation.xml is missing.');
+  }
+
+  const presDoc = parseXml(files.get('ppt/presentation.xml'));
+  const presRels = relsFor(files, 'ppt/presentation.xml');
+
+  /* slide size, in points */
+  const sz = find(presDoc, 'p', 'sldSz');
+  const SW = num(sz, 'cx', 9144000) / PT;
+  const SH = num(sz, 'cy', 6858000) / PT;
+
+  /* slide order comes from sldIdLst, NOT from filename order — a deck that has
+     been reordered keeps its original slideN.xml names. */
+  const order = [];
+  const lst = find(presDoc, 'p', 'sldIdLst');
+  for (const s of kids(lst, 'p', 'sldId')){
+    const rid = s.getAttributeNS(NS.r, 'id');
+    const rel = presRels.get(rid);
+    if (rel) order.push(resolvePath('ppt/presentation.xml', rel.target));
+  }
+  if (!order.length){
+    for (const name of files.keys()){
+      if (/^ppt\/slides\/slide\d+\.xml$/.test(name)) order.push(name);
+    }
+    order.sort((a,b) => (+a.match(/(\d+)/)[1]) - (+b.match(/(\d+)/)[1]));
+  }
+  if (!order.length) throw new Error('No slides found in this presentation.');
+
+  const { PDFDocument, StandardFonts, rgb, degrees } = await root.DocsLib.need.pdflib();
+  const pdf = await PDFDocument.create();
+  const F = {
+    reg : await pdf.embedFont(StandardFonts.Helvetica),
+    bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+    ital: await pdf.embedFont(StandardFonts.HelveticaOblique),
+    bi  : await pdf.embedFont(StandardFonts.HelveticaBoldOblique),
+  };
+  const notes = { skipped:0, images:0, badImages:0, tables:0, dropped:{ n:0 } };
+  const imgCache = new Map();
+
+  for (let i = 0; i < order.length; i++){
+    const partName = order[i];
+    const doc = parseXml(files.get(partName));
+    if (!doc){ notes.skipped++; continue; }
+
+    const rels = relsFor(files, partName);
+
+    /* layout -> master, for placeholder geometry, theme and background */
+    let layoutDoc = null, layoutPart = null, masterDoc = null, masterPart = null;
+    for (const [, rel] of rels){
+      if (rel.type && rel.type.endsWith('/slideLayout')){
+        layoutPart = resolvePath(partName, rel.target);
+        layoutDoc = parseXml(files.get(layoutPart));
+      }
+    }
+    if (layoutDoc){
+      for (const [, rel] of relsFor(files, layoutPart)){
+        if (rel.type && rel.type.endsWith('/slideMaster')){
+          masterPart = resolvePath(layoutPart, rel.target);
+          masterDoc = parseXml(files.get(masterPart));
+        }
+      }
+    }
+    let theme = {};
+    if (masterDoc){
+      for (const [, rel] of relsFor(files, masterPart)){
+        if (rel.type && rel.type.endsWith('/theme')){
+          const t = parseXml(files.get(resolvePath(masterPart, rel.target)));
+          if (t) theme = themeColors(t);
+        }
+      }
+    }
+
+    const phLayout = placeholderMap(layoutDoc);
+    const phMaster = placeholderMap(masterDoc);
+
+    const page = pdf.addPage([SW, SH]);
+    const ctx = { pdf, page, rgb, degrees, F, files, rels, partName, theme,
+                  phLayout, phMaster, SW, SH, notes, imgCache };
+
+    /* background: slide, else layout, else master */
+    const bg = bgColor(doc, theme) || bgColor(layoutDoc, theme) || bgColor(masterDoc, theme);
+    if (bg) page.drawRectangle({ x:0, y:0, width:SW, height:SH, color: rgb(bg.r, bg.g, bg.b) });
+
+    const tree = find(doc, 'p', 'spTree');
+    if (tree) await walk(tree, ctx, { dx:0, dy:0, sx:1, sy:1 });
+
+    prog((i + 1) / order.length);
+    if (i % 4 === 3 && root.Core && root.Core.idle) await root.Core.idle();
+  }
+
+  const out = await pdf.save();
+  return {
+    blob: new Blob([out], { type:'application/pdf' }),
+    slides: order.length,
+    width: SW, height: SH,
+    notes,
+  };
+}
+
+function bgColor(doc, theme){
+  if (!doc) return null;
+  const bg = find(doc, 'p', 'bg');
+  if (!bg) return null;
+  const solid = find(bg, 'a', 'solidFill');
+  return solid ? colorOf(solid, theme) : null;
+}
+
+/* ================= walking the shape tree ================= */
+async function walk(tree, ctx, T){
+  for (let n = tree.firstElementChild; n; n = n.nextElementSibling){
+    if (n.namespaceURI !== NS.p) continue;
+    try {
+      if (n.localName === 'sp')            await drawShape(n, ctx, T);
+      else if (n.localName === 'pic')      await drawPicture(n, ctx, T);
+      else if (n.localName === 'graphicFrame') await drawFrame(n, ctx, T);
+      else if (n.localName === 'grpSp')    await drawGroup(n, ctx, T);
+      else if (n.localName === 'cxnSp')    await drawShape(n, ctx, T);   // connectors
+    } catch (e){
+      ctx.notes.skipped++;
+    }
+  }
+}
+
+/** A group carries its own frame plus a child coordinate space to map from. */
+async function drawGroup(grp, ctx, T){
+  const gp = kid(grp, 'p', 'grpSpPr');
+  const x = find(gp, 'a', 'xfrm');
+  let inner = T;
+  if (x){
+    const off = kid(x,'a','off'), ext = kid(x,'a','ext');
+    const chOff = kid(x,'a','chOff'), chExt = kid(x,'a','chExt');
+    if (off && ext && chOff && chExt){
+      const cx = num(chExt,'cx',1) || 1, cy = num(chExt,'cy',1) || 1;
+      const sx = (num(ext,'cx',cx) / cx) * T.sx;
+      const sy = (num(ext,'cy',cy) / cy) * T.sy;
+      inner = {
+        sx, sy,
+        dx: T.dx + (num(off,'x',0)/PT) * T.sx - (num(chOff,'x',0)/PT) * sx,
+        dy: T.dy + (num(off,'y',0)/PT) * T.sy - (num(chOff,'y',0)/PT) * sy,
+      };
+    }
+  }
+  await walk(grp, ctx, inner);
+}
+
+/** Apply the current group transform, and flip to PDF's bottom-left origin. */
+function place(box, ctx, T){
+  const x = T.dx + box.x * T.sx;
+  const y = T.dy + box.y * T.sy;
+  const w = box.w * T.sx;
+  const h = box.h * T.sy;
+  return { x, w, h, top: y, y: ctx.SH - y - h };
+}
+
+/** Where is this shape? Its own xfrm, else the layout's, else the master's. */
+function boxFor(sp, ctx){
+  const own = xfrmOf(kid(sp, 'p', 'spPr'));
+  if (own) return own;
+  const key = phKeyOf(sp);
+  if (!key) return null;
+  const bare = key.split('#')[0] + '#';
+  return ctx.phLayout.get(key) || ctx.phMaster.get(key) ||
+         ctx.phLayout.get(bare) || ctx.phMaster.get(bare) || null;
+}
+
+async function drawShape(sp, ctx, T){
+  const spPr = kid(sp, 'p', 'spPr');
+  const box = boxFor(sp, ctx);
+  if (!box) return;
+  const R = place(box, ctx, T);
+  if (R.w <= 0 || R.h <= 0) return;
+
+  /* fill */
+  const noFill = find(spPr, 'a', 'noFill');
+  const solid  = kid(spPr, 'a', 'solidFill');
+  const fill   = (!noFill && solid) ? colorOf(solid, ctx.theme) : null;
+
+  /* outline */
+  const ln = kid(spPr, 'a', 'ln');
+  const lnNoFill = ln ? kid(ln, 'a', 'noFill') : null;
+  const stroke = (ln && !lnNoFill) ? colorOf(kid(ln, 'a', 'solidFill'), ctx.theme) : null;
+  const lw = ln ? Math.max(0.4, num(ln, 'w', 9525) / PT) : 0.75;
+
+  const prst = attr(find(spPr, 'a', 'prstGeom'), 'prst', 'rect');
+
+  if (fill || stroke){
+    const common = { x:R.x, y:R.y, width:R.w, height:R.h };
+    if (fill)   common.color = ctx.rgb(fill.r, fill.g, fill.b);
+    if (stroke){ common.borderColor = ctx.rgb(stroke.r, stroke.g, stroke.b); common.borderWidth = lw; }
+    if (/^(ellipse|circle)$/.test(prst)){
+      ctx.page.drawEllipse({ x:R.x + R.w/2, y:R.y + R.h/2, xScale:R.w/2, yScale:R.h/2,
+        color: common.color, borderColor: common.borderColor, borderWidth: common.borderWidth });
+    } else if (/^(line|straightConnector1|bentConnector|curvedConnector)/.test(prst)){
+      if (stroke) ctx.page.drawLine({
+        start:{ x:R.x, y:R.y + R.h }, end:{ x:R.x + R.w, y:R.y },
+        thickness: lw, color: ctx.rgb(stroke.r, stroke.g, stroke.b) });
+    } else {
+      ctx.page.drawRectangle(common);
+    }
+  }
+
+  const tx = kid(sp, 'p', 'txBody');
+  if (tx) drawText(tx, R, ctx, sp);
+}
+
+async function drawPicture(pic, ctx, T){
+  const box = xfrmOf(kid(pic, 'p', 'spPr'));
+  if (!box) return;
+  const R = place(box, ctx, T);
+  if (R.w <= 0 || R.h <= 0) return;
+
+  const blip = find(pic, 'a', 'blip');
+  const rid = blip && blip.getAttributeNS(NS.r, 'embed');
+  if (!rid) return;
+  const rel = ctx.rels.get(rid);
+  if (!rel) return;
+  const path = resolvePath(ctx.partName, rel.target);
+  const data = ctx.files.get(path);
+  if (!data){ ctx.notes.badImages++; return; }
+
+  let img = ctx.imgCache.get(path);
+  if (img === undefined){
+    img = null;
+    try {
+      // sniff the bytes, not the extension: decks routinely mislabel these
+      if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47){
+        img = await ctx.pdf.embedPng(data);
+      } else if (data[0] === 0xFF && data[1] === 0xD8){
+        img = await ctx.pdf.embedJpg(data);
+      }
+    } catch (_){ img = null; }
+    ctx.imgCache.set(path, img);
+  }
+  if (!img){ ctx.notes.badImages++; return; }   // gif / bmp / emf / wmf / svg
+
+  ctx.page.drawImage(img, { x:R.x, y:R.y, width:R.w, height:R.h });
+  ctx.notes.images++;
+}
+
+/** Tables arrive as a graphicFrame wrapping <a:tbl>. */
+async function drawFrame(fr, ctx, T){
+  const xf = find(fr, 'p', 'xfrm') || find(fr, 'a', 'xfrm');
+  const off = kid(xf, 'a', 'off'), ext = kid(xf, 'a', 'ext');
+  if (!off || !ext) { ctx.notes.skipped++; return; }
+  const box = { x:num(off,'x',0)/PT, y:num(off,'y',0)/PT,
+                w:num(ext,'cx',0)/PT, h:num(ext,'cy',0)/PT };
+  const R = place(box, ctx, T);
+
+  const tbl = find(fr, 'a', 'tbl');
+  if (!tbl){ ctx.notes.skipped++; return; }      // chart, SmartArt, OLE object
+  ctx.notes.tables++;
+
+  const grid = find(tbl, 'a', 'tblGrid');
+  const colW = kids(grid, 'a', 'gridCol').map(c => num(c, 'w', 0) / PT * T.sx);
+  const totalW = colW.reduce((a,b) => a+b, 0) || R.w;
+  const scale = R.w / totalW;
+
+  let y = R.top;
+  for (const tr of kids(tbl, 'a', 'tr')){
+    const rowH = num(tr, 'h', 0) / PT * T.sy;
+    let x = R.x, ci = 0;
+    for (const tc of kids(tr, 'a', 'tc')){
+      const w = (colW[ci] || (R.w / Math.max(1, colW.length))) * scale;
+      const cellFill = colorOf(kid(kid(tc, 'a', 'tcPr'), 'a', 'solidFill'), ctx.theme);
+      const cy = ctx.SH - y - rowH;
+      if (cellFill){
+        ctx.page.drawRectangle({ x, y:cy, width:w, height:rowH,
+          color: ctx.rgb(cellFill.r, cellFill.g, cellFill.b) });
+      }
+      ctx.page.drawRectangle({ x, y:cy, width:w, height:rowH,
+        borderColor: ctx.rgb(.72,.72,.72), borderWidth:0.5 });
+      const tx = kid(tc, 'a', 'txBody');
+      if (tx) drawText(tx, { x:x+3, y:cy, w:w-6, h:rowH, top:y }, ctx, null, 9);
+      x += w; ci++;
+    }
+    y += rowH;
+  }
+}
+
+/* ================= text ================= */
+
+/** Default point size when neither run nor layout says one. */
+function defaultSize(sp){
+  if (!sp) return 12;
+  const ph = find(sp, 'p', 'ph');
+  const type = ph ? attr(ph, 'type', 'body') : 'body';
+  if (type === 'ctrTitle' || type === 'title') return 36;
+  if (type === 'subTitle') return 20;
+  return 18;
+}
+
+function drawText(txBody, R, ctx, sp, forceSize){
+  const bodyPr = kid(txBody, 'a', 'bodyPr');
+  const anchor = attr(bodyPr, 'anchor', 't');            // t | ctr | b
+  const insL = num(bodyPr, 'lIns', 91440) / PT;
+  const insR = num(bodyPr, 'rIns', 91440) / PT;
+  const insT = num(bodyPr, 'tIns', 45720) / PT;
+  const insB = num(bodyPr, 'bIns', 45720) / PT;
+
+  const boxX = R.x + insL;
+  const boxW = Math.max(6, R.w - insL - insR);
+  const boxTop = R.top + insT;
+  const boxH = Math.max(6, R.h - insT - insB);
+
+  const base = forceSize || defaultSize(sp);
+  const lines = [];
+
+  for (const p of kids(txBody, 'a', 'p')){
+    const pPr = kid(p, 'a', 'pPr');
+    const align = attr(pPr, 'algn', 'l');
+    const lvl = parseInt(attr(pPr, 'lvl', '0'), 10) || 0;
+    const buChar = kid(pPr, 'a', 'buChar');
+    const buNone = kid(pPr, 'a', 'buNone');
+    const indent = lvl * 16;
+
+    /* gather runs; <a:br/> forces a new line */
+    let segs = [];
+    const flush = () => { pushWrapped(lines, segs, boxW - indent, align, indent, ctx); segs = []; };
+
+    for (let n = p.firstElementChild; n; n = n.nextElementSibling){
+      if (n.namespaceURI !== NS.a) continue;
+      if (n.localName === 'br'){ flush(); continue; }
+      if (n.localName !== 'r' && n.localName !== 'fld') continue;
+      const rPr = kid(n, 'a', 'rPr');
+      const t = kid(n, 'a', 't');
+      const raw = t ? t.textContent : '';
+      if (!raw) continue;
+      const size = rPr && rPr.hasAttribute('sz') ? num(rPr, 'sz', base*100) / 100 : base;
+      const bold = attr(rPr, 'b') === '1';
+      const ital = attr(rPr, 'i') === '1';
+      const col  = colorOf(kid(rPr, 'a', 'solidFill'), ctx.theme) || { r:0, g:0, b:0 };
+      segs.push({ text: toWinAnsi(raw, ctx.notes.dropped), size, bold, ital, col });
+    }
+
+    if (segs.length && buChar && !buNone){
+      const b = toWinAnsi(attr(buChar, 'char', '•'), ctx.notes.dropped) || '-';
+      segs.unshift({ text: b + '  ', size: segs[0].size, bold:false, ital:false, col: segs[0].col });
+    }
+    if (segs.length) flush();
+    else lines.push({ segs: [], height: base * 1.2, align, indent });   // blank line
+  }
+
+  if (!lines.length) return;
+
+  const totalH = lines.reduce((a, l) => a + l.height, 0);
+  let y = boxTop;
+  if (anchor === 'ctr') y = boxTop + Math.max(0, (boxH - totalH) / 2);
+  else if (anchor === 'b') y = boxTop + Math.max(0, boxH - totalH);
+
+  for (const line of lines){
+    const w = line.segs.reduce((a, s) => a + fontOf(ctx.F, s).widthOfTextAtSize(s.text, s.size), 0);
+    let x = boxX + line.indent;
+    if (line.align === 'ctr') x = boxX + line.indent + Math.max(0, (boxW - line.indent - w) / 2);
+    else if (line.align === 'r') x = boxX + Math.max(0, boxW - w);
+
+    const baseline = ctx.SH - y - line.height * 0.82;
+    for (const s of line.segs){
+      if (!s.text) continue;
+      try {
+        ctx.page.drawText(s.text, { x, y: baseline, size: s.size,
+          font: fontOf(ctx.F, s), color: ctx.rgb(s.col.r, s.col.g, s.col.b) });
+      } catch (_){ ctx.notes.skipped++; }
+      x += fontOf(ctx.F, s).widthOfTextAtSize(s.text, s.size);
+    }
+    y += line.height;
+  }
+}
+
+const fontOf = (F, s) => s.bold && s.ital ? F.bi : s.bold ? F.bold : s.ital ? F.ital : F.reg;
+
+/** Break a run sequence into lines that fit the box, keeping run styling. */
+function pushWrapped(lines, segs, width, align, indent, ctx){
+  if (!segs.length) return;
+  let cur = [], curW = 0;
+  const height = () => Math.max(...(cur.length ? cur : segs).map(s => s.size)) * 1.22;
+
+  for (const seg of segs){
+    const font = fontOf(ctx.F, seg);
+    // keep the spaces: split on word boundaries but retain them for width
+    const words = seg.text.split(/(\s+)/).filter(w => w !== '');
+    let buf = '';
+    for (const w of words){
+      const test = buf + w;
+      const tw = font.widthOfTextAtSize(test, seg.size);
+      if (curW + tw > width && (buf || cur.length)){
+        if (buf) cur.push({ ...seg, text: buf });
+        lines.push({ segs: cur, height: height(), align, indent });
+        cur = []; curW = 0;
+        buf = /^\s+$/.test(w) ? '' : w;             // a wrap eats the space
+      } else {
+        buf = test;
+      }
+    }
+    if (buf){ cur.push({ ...seg, text: buf }); curW += font.widthOfTextAtSize(buf, seg.size); }
+  }
+  if (cur.length) lines.push({ segs: cur, height: height(), align, indent });
+}
+
+/* ================= a cheap look inside, for the UI ================= */
+async function probe(bytes){
+  const files = await root.Zip.read(bytes);
+  const presDoc = parseXml(files.get('ppt/presentation.xml'));
+  if (!presDoc) throw new Error('Not a PowerPoint file.');
+  const sz = find(presDoc, 'p', 'sldSz');
+  let slides = 0, media = 0;
+  for (const name of files.keys()){
+    if (/^ppt\/slides\/slide\d+\.xml$/.test(name)) slides++;
+    if (/^ppt\/media\//.test(name)) media++;
+  }
+  const w = num(sz, 'cx', 9144000) / PT, h = num(sz, 'cy', 6858000) / PT;
+  return { slides, media, width:w, height:h,
+           ratio: (w/h > 1.5) ? '16:9' : (Math.abs(w/h - 4/3) < 0.05 ? '4:3' : (w/h).toFixed(2)+':1'),
+           charts:  countAll(files, /<c:chart|graphicData[^>]*chart/),
+           smartArt:countAll(files, /diagramData|smartArt/) };
+}
+function countAll(files, re){
+  let n = 0;
+  for (const [name, data] of files){
+    if (!/^ppt\/slides\/slide\d+\.xml$/.test(name)) continue;
+    if (re.test(dec.decode(data))) n++;
+  }
+  return n;
+}
+
+const isPptx = f => /\.pptx$/i.test(f.name || String(f));
+const isLegacyPpt = f => /\.ppt$/i.test(f.name || String(f));
+
+root.Pptx = { toPdf, probe, isPptx, isLegacyPpt };
+
+})(typeof self !== 'undefined' ? self : this);

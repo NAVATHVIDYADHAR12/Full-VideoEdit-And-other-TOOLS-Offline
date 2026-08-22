@@ -1,4 +1,7 @@
 # local-development only — not needed by the hosted app
+# node_modules is only ever installed to test the converters offline;
+# the app itself loads nothing from it.
+node_modules/
 server.js
 start.bat
 fetch-vendor.js

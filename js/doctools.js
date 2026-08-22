@@ -204,6 +204,12 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
       ['pdf', 'PDF', 'Content, headings and images are preserved. Exact Word pagination and fancy layout are approximated — this is a re-layout, not a pixel copy.'],
       ['txt', 'Plain text (.txt)', 'Just the words.'],
     ],
+    pptx: [
+      ['pdf', 'PDF', 'One page per slide, at the deck’s own size and aspect ratio. Text, ' +
+                     'pictures, shapes, tables and colours are drawn where PowerPoint put them. ' +
+                     'Animations, charts and SmartArt cannot be drawn — you are told before ' +
+                     'you convert if the deck uses them.'],
+    ],
     img: [ ['pdf','PDF','One page per image.'] ],
     txt: [ ['pdf','PDF','Laid out as plain paragraphs.'], ['docx','Word (.docx)','Each line becomes a paragraph.'] ],
   };
@@ -211,12 +217,14 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
   makePicker(p.q('pick'), {
     kind:'docs', icon:'🔄',
     label:'Drag &amp; drop the document to convert',
-    sub:'PDF, Word .docx, images or .txt',
+    sub:'PDF, Word .docx, PowerPoint .pptx, images or .txt',
     onFile: load
   });
 
   function kindOf(f){
-    return L.isPdf(f) ? 'pdf' : L.isDocx(f) ? 'docx' : L.isImg(f) ? 'img' : L.isTxt(f) ? 'txt' : null;
+    return L.isPdf(f) ? 'pdf' : L.isDocx(f) ? 'docx'
+         : (window.Pptx && Pptx.isPptx(f)) ? 'pptx'
+         : L.isImg(f) ? 'img' : L.isTxt(f) ? 'txt' : null;
   }
 
   function load(f){
@@ -225,9 +233,13 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
     if (!k){
       const e = L.extOf(f.name);
       return p.fail('.' + e + ' files are not supported.' +
-        (/^(ppt|pptx|doc|odt|rtf)$/.test(e)
-          ? '\n\nPowerPoint and legacy .doc need a real Office engine, which cannot run in a browser. ' +
-            'Save the file as PDF or .docx first, then convert it here.'
+        (e === 'ppt'
+          ? '\n\nThis is the pre-2007 binary PowerPoint format \u2014 a different file ' +
+            'format from .pptx, and not one a browser can read. Open it in PowerPoint ' +
+            'and "Save As" .pptx, then convert it here.'
+          : /^(doc|odt|rtf)$/.test(e)
+          ? '\n\nLegacy .doc and OpenDocument need a real Office engine, which cannot ' +
+            'run in a browser. Save the file as PDF or .docx first, then convert it here.'
           : ''));
     }
     file = f;
@@ -242,7 +254,35 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
     p.q('pick').classList.add('hide');
     p.q('analysis').classList.add('hide');
     p.step('body');
-    if (k === 'pdf') inspect(f);
+    if (k === 'pdf')  inspect(f);
+    if (k === 'pptx') inspectDeck(f);
+  }
+
+  /* Say what is in the deck before converting, so anything that cannot be drawn
+     is known in advance rather than discovered in the output. */
+  async function inspectDeck(f){
+    const box = p.q('analysis');
+    box.className = 'note';
+    box.classList.remove('hide');
+    box.textContent = 'Looking inside the deck\u2026';
+    try {
+      const d = await Pptx.probe(await bytesOf(f));
+      const trouble = [];
+      if (d.charts)   trouble.push(d.charts + ' slide(s) contain a chart');
+      if (d.smartArt) trouble.push(d.smartArt + ' slide(s) contain SmartArt');
+      box.className = trouble.length ? 'note' : 'note ok';
+      box.innerHTML = '\ud83d\udd0e <b>' + d.slides + '</b> slide(s), ' + d.ratio +
+        ', ' + Math.round(d.width) + '\u00d7' + Math.round(d.height) + ' pt' +
+        (d.media ? ', ' + d.media + ' embedded media file(s)' : '') + '.' +
+        (trouble.length
+          ? '<br>\u26a0 ' + trouble.join(' and ') + '. Those are drawn by PowerPoint\u2019s own ' +
+            'engine and have no PDF equivalent here \u2014 they will be missing from those slides. ' +
+            'Everything else converts normally.'
+          : '<br>Nothing in this deck needs an Office engine, so it should convert cleanly.');
+    } catch(e){
+      box.className = 'note';
+      box.textContent = 'Could not read this deck (' + e.message + ') \u2014 you can still try converting it.';
+    }
   }
 
   /* Look inside the PDF and say what is actually in there, so a scanned
@@ -304,6 +344,30 @@ const bytesOf = async f => new Uint8Array(await f.arrayBuffer());
       const bytes = await bytesOf(file);
       const base = baseName(file.name);
 
+      if (kindOf(file) === 'pptx'){
+        p.stat('Reading the slides\u2026');
+        const r = await Pptx.toPdf(bytes, {}, v => p.prog(v));
+        outBlob = r.blob;
+        outName = base + '.pdf';
+        const n = r.notes;
+        const warn = [];
+        if (n.badImages) warn.push(n.badImages +
+          ' picture(s) were in a format a PDF cannot hold (EMF/WMF/GIF/BMP) and were left out');
+        if (n.skipped) warn.push(n.skipped +
+          ' shape(s) could not be drawn \u2014 charts, SmartArt and effects have no PDF equivalent');
+        if (n.dropped.n) warn.push(n.dropped.n +
+          ' non-Latin character(s) became "?" \u2014 the built-in PDF fonts cannot draw them');
+        finish('\u2705 Converted <b>' + r.slides + '</b> slide(s) to PDF \u2014 <b>' +
+          fmtBytes(outBlob.size) + '</b>, ' + Math.round(r.width) + '\u00d7' + Math.round(r.height) +
+          ' pt per page.' +
+          (n.images ? '<br>' + n.images + ' picture(s) placed.' : '') +
+          (n.tables ? ' ' + n.tables + ' table(s) rebuilt.' : '') +
+          (warn.length ? '<br>\u26a0 ' + warn.join('.<br>\u26a0 ') + '.' : '') +
+          '<br><span style="opacity:.8">Slides are redrawn from the PowerPoint XML, not ' +
+          'photographed \u2014 so the text stays selectable, but fonts fall back to Helvetica ' +
+          'and effects are not reproduced.</span>');
+        return;
+      }
       if (fmt === 'docx-text'){
         p.stat('Reading text, images and tables out of the PDF…');
         const keepLayout = p.q('layout').value === 'exact';

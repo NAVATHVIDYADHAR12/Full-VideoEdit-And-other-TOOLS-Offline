@@ -64,7 +64,7 @@ function makePicker(container, opt){
   const accept = opt.accept || (
       kind === 'audio' ? 'audio/*'
     : kind === 'media' ? 'video/*,audio/*'
-    : kind === 'docs'  ? '.pdf,.docx,.doc,.txt,.rtf,.md,image/*'
+    : kind === 'docs'  ? '.pdf,.docx,.doc,.pptx,.ppt,.txt,.rtf,.md,image/*'
     : kind === 'word'  ? '.docx'
     : kind === 'pdf'   ? '.pdf'
     : 'video/*');
