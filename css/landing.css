@@ -1457,3 +1457,143 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
   .gcur, .gcur-dot, .gcur-wave{ display:none !important; }
   .gcur-on, .gcur-on *{ cursor:auto; }
 }
+
+/* ================= the motion layer =================
+ * The page had reveals, but everything arrived as a block: four stat boxes on
+ * one trigger, ten tool cards on another, headlines fading as a lump. Nothing
+ * announced itself. What follows is the arrival choreography -- an overture on
+ * load, masked lines for the headings, and per-child sequencing for the grids.
+ *
+ * The restraint rule from the palette applies to movement too: short travel,
+ * long easing, nothing bouncing. Expensive motion is slow and certain.
+ */
+:root{
+  --eo:cubic-bezier(.22,.61,.36,1);
+  --eo2:cubic-bezier(.16,1,.30,1);   /* a longer tail, for arrivals */
+}
+
+/* Without JS nothing may stay hidden -- every rule below is opt-in via the
+   class the inline head script sets, so a script failure shows a plain page. */
+html:not(.js-anim) [data-reveal],
+html:not(.js-anim) [data-stage],
+html:not(.js-anim) [data-seq] > *,
+html:not(.js-anim) .mln > span{ opacity:1 !important; transform:none !important; }
+
+/* ---------- direction-aware travel ----------
+   A block that left over the top should come back down from the top when you
+   scroll up to it again, not rise from below. --rv carries the sign, is set on
+   the reveal container as it leaves, and inherits to every stage inside it. */
+[data-reveal]{ transform:translateY(var(--rv, 16px)); }
+[data-stage]{  transform:translateY(var(--rv, 15px)); }
+
+/* ---------- masked line reveal ----------
+   Headings rise out from behind an edge rather than fading in place. The
+   padding/margin pair keeps descenders and the italic gold from being clipped
+   by the very overflow that makes the effect work. */
+.mln{ display:block; overflow:hidden; padding-bottom:.14em; margin-bottom:-.14em; }
+.mln > span{
+  display:block;
+  transform:translateY(var(--mln, 112%));
+  opacity:0;
+  transition:transform 1.15s var(--eo2), opacity .85s var(--eo2);
+  transition-delay:calc(var(--ld, 0ms) + var(--i, 0) * 110ms);
+}
+[data-reveal].in .mln > span{ transform:none; opacity:1; }
+/* the masked element itself no longer moves -- its lines do the work */
+.is-masked{ opacity:1 !important; transform:none !important; }
+
+/* ---------- sequenced children ----------
+   One trigger, but the children land one after another. --i is stamped on each
+   child by the script, so the same rule serves four stat boxes and ten cards. */
+[data-reveal][data-seq]{ opacity:1; transform:none; }
+[data-seq] > *{
+  opacity:0;
+  transform:translateY(var(--rv, 26px));
+  transition:opacity .8s var(--eo2), transform .8s var(--eo2);
+  transition-delay:calc(var(--i, 0) * var(--step, 85ms));
+}
+[data-seq].in > *{ opacity:1; transform:none; }
+.toolgrid[data-seq]{ --step:58ms; }   /* ten of them; keep it brisk */
+.stats[data-seq]{ --step:110ms; }
+
+/* the counting numerals must not reflow the box on every frame */
+.stats b{ font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }
+
+/* ---------- the seam into the next section ----------
+   A gold hairline draws itself across as each section head arrives: the moment
+   that tells you the page has moved on from the hero. */
+/* scoped to the animated page: other pages share this stylesheet without the
+   reveal script, and an undrawn hairline there would only be a stray gap */
+.js-anim .sechead::before{
+  content:''; display:block; height:1px; width:0; margin-bottom:28px;
+  background:linear-gradient(90deg, var(--accent), transparent);
+  transition:width 1.3s var(--eo2) 60ms;
+}
+.js-anim .sechead.in::before{ width:min(190px, 42%); }
+
+/* ---------- the overture ----------
+   Nav first, then the hero beneath it. The bar owns the first quarter second
+   because it frames everything else. */
+.js-anim .nav .brand,
+.js-anim .nav .navtoggle,
+.js-anim .nav .navlinks > *,
+.js-anim .nav .navcta{
+  opacity:0; transform:translateY(-9px);
+  transition:opacity .8s var(--eo2), transform .8s var(--eo2);
+}
+.js-anim .nav .brand .mark{
+  transform:scale(.86); opacity:0;
+  transition:transform 1.1s var(--eo2) 60ms, opacity .8s var(--eo2) 60ms;
+}
+.js-anim .nav.lit .brand .mark{ transform:none; opacity:1; }
+.js-anim .nav.lit .brand,
+.js-anim .nav.lit .navtoggle,
+.js-anim .nav.lit .navlinks > *,
+.js-anim .nav.lit .navcta{ opacity:1; transform:none; }
+.js-anim .nav.lit .brand{ transition-delay:60ms; }
+.js-anim .nav.lit .navlinks > *:nth-child(1){ transition-delay:200ms; }
+.js-anim .nav.lit .navlinks > *:nth-child(2){ transition-delay:260ms; }
+.js-anim .nav.lit .navlinks > *:nth-child(3){ transition-delay:320ms; }
+.js-anim .nav.lit .navtoggle{ transition-delay:200ms; }
+.js-anim .nav.lit .navcta{ transition-delay:380ms; }
+
+/* the hero waits for the bar, then unfolds top to bottom */
+.js-anim .hero .herorule{
+  transform:scaleY(0); transform-origin:50% 0; opacity:0;
+  transition:transform 1.1s var(--eo2) 420ms, opacity .6s ease 420ms;
+}
+.js-anim .hero.in .herorule{ transform:none; opacity:.7; }
+.js-anim .hero .display{ --ld:520ms; }
+.js-anim .hero [data-stage="2"]{ transition-delay:900ms; }
+.js-anim .hero [data-stage="3"]{ transition-delay:1040ms; }
+.js-anim .hero .scrollcue{
+  opacity:0; transition:opacity 1s ease 1500ms;
+}
+.js-anim .hero.in .scrollcue{ opacity:1; }
+
+/* one slow sheen across the gold button as it lands, and never again */
+.js-anim .hero.in .btn-gold{ position:relative; overflow:hidden; }
+.js-anim .hero.in .btn-gold::after{
+  content:''; position:absolute; top:0; bottom:0; left:-60%; width:45%;
+  background:linear-gradient(100deg, transparent,
+             rgba(255,255,255,.42), transparent);
+  transform:skewX(-18deg); pointer-events:none;
+  animation:sheen 1.5s var(--eo) 1500ms both;
+}
+@keyframes sheen{ from{ left:-60% } to{ left:130% } }
+
+@media (prefers-reduced-motion:reduce){
+  .mln > span, [data-seq] > *{
+    opacity:1 !important; transform:none !important; transition:none !important; }
+  .js-anim .sechead::before{ width:min(190px,42%); transition:none; }
+  .js-anim .nav .brand, .js-anim .nav .navtoggle,
+  .js-anim .nav .navlinks > *, .js-anim .nav .navcta,
+  .js-anim .nav .brand .mark, .js-anim .hero .herorule,
+  .js-anim .hero .scrollcue{
+    opacity:1 !important; transform:none !important; transition:none !important; }
+  .js-anim .hero.in .btn-gold::after{ animation:none; display:none; }
+}
+
+/* A masked heading no longer fades as a block, so it loses the stage delay it
+   used to inherit: this puts it back behind its eyebrow. */
+.sechead h2{ --ld:140ms; }

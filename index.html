@@ -11,6 +11,9 @@
 <meta name="theme-color" content="#080808">
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/landing.css">
+<!-- Motion is opt-in: every entrance rule is scoped to this class, so if
+     scripting is off or fails the page renders plainly instead of blank. -->
+<script>document.documentElement.classList.add("js-anim");</script>
 </head>
 <body>
 <!-- ============ floating navigation ============ -->
@@ -45,7 +48,7 @@
 <div id="landing">
 
   <!-- ============ hero ============ -->
-  <section class="hero in" id="hero" data-reveal>
+  <section class="hero" id="hero" data-reveal>
     <div class="herostage">
       <canvas id="heroframes" aria-hidden="true"></canvas>
 
@@ -227,7 +230,7 @@
           why it still works with the network unplugged.
         </p>
       </div>
-      <div class="stats" data-reveal data-stage="1">
+      <div class="stats" data-reveal data-seq>
         <div><b>10</b><small>Tools</small></div>
         <div><b>0</b><small>Bytes uploaded</small></div>
         <div><b>13</b><small>Test suites</small></div>
@@ -245,7 +248,7 @@
         <p data-stage="3">Pick one and it opens in place. Your files never move off the machine.</p>
       </div>
 
-      <div class="toolgrid" data-reveal data-stage="1">
+      <div class="toolgrid" data-reveal data-seq>
         <button class="toolcard" data-go="editor">
           <span class="num">01</span><b>Video editor</b>
           <small>A timeline with layered video and audio tracks, trimming, splitting, effects and text &mdash; rendered to MP4.</small>

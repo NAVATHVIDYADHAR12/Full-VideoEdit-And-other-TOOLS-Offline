@@ -203,19 +203,126 @@ document.querySelectorAll('.btrack').forEach(track => {
  * Not one-shot: the class comes off again once a block has fully left, so the
  * sequence replays every time you scroll back to it.
  */
+const reduced = window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---- masked headings ----------------------------------------------------
+ * Wrapping each line in its own clipped box lets it rise out from behind an
+ * edge instead of fading in place. Done here rather than in the markup so the
+ * HTML stays readable and a script failure just leaves ordinary headings. */
+function maskLines(el){
+  if (el.dataset.masked) return;
+  el.dataset.masked = '1';
+  const lines = el.innerHTML.split(/<br\s*\/?>/i);
+  el.innerHTML = lines.map((line, i) =>
+    '<span class="mln" style="--i:' + i + '"><span>' + line + '</span></span>'
+  ).join('');
+  el.classList.add('is-masked');
+}
+document.querySelectorAll('.hero .display, .sechead h2').forEach(maskLines);
+
+/* ---- sequenced children -------------------------------------------------
+ * The stat boxes and the ten tool cards used to share a single trigger and so
+ * arrived all at once. Stamping an index on each child lets one CSS rule walk
+ * them in one at a time. */
+document.querySelectorAll('[data-seq]').forEach(box => {
+  Array.prototype.forEach.call(box.children, (child, i) =>
+    child.style.setProperty('--i', i));
+});
+
+/* ---- counting numerals --------------------------------------------------
+ * The figures read as claims when they are simply printed; watching one climb
+ * makes it read as a measurement. Suffixes are kept, so 100% still ends in a
+ * percent sign, and the final frame is the original text rather than something
+ * the easing rounded to. */
+const COUNT_MS = 1600;
+const easeOutExpo = t => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+
+document.querySelectorAll('.stats b').forEach(b => {
+  const m = b.textContent.trim().match(/^([\d.,]+)(.*)$/);
+  if (!m) return;
+  b.dataset.final  = b.textContent.trim();
+  b.dataset.target = m[1].replace(/,/g, '');
+  b.dataset.suffix = m[2] || '';
+});
+
+function count(b){
+  const target = parseFloat(b.dataset.target);
+  if (!isFinite(target)) return;
+  // counting up to nothing is a non-event: "0 bytes uploaded" is the whole point
+  if (reduced || target === 0){ b.textContent = b.dataset.final; return; }
+
+  cancelAnimationFrame(b._raf);
+  const decimals = (b.dataset.target.split('.')[1] || '').length;
+  const started  = performance.now();
+
+  const frame = now => {
+    const p = Math.min(1, (now - started) / COUNT_MS);
+    if (p < 1){
+      const v = target * easeOutExpo(p);
+      b.textContent = (decimals ? v.toFixed(decimals)
+                                : Math.round(v).toLocaleString()) + b.dataset.suffix;
+      b._raf = requestAnimationFrame(frame);
+    } else {
+      b.textContent = b.dataset.final;
+    }
+  };
+  b.textContent = '0' + b.dataset.suffix;
+  b._raf = requestAnimationFrame(frame);
+}
+
+/* ---- which way the reader is travelling ---------------------------------
+ * A block that left over the top should return from the top, not rise from
+ * below. The side it exited on is recorded as it goes, and the sign is read
+ * back by the CSS through an inherited custom property. */
+function park(el, sign){
+  el.style.setProperty('--rv', (sign * 16) + 'px');
+  el.style.setProperty('--mln', (sign * 112) + '%');
+}
+
 const io = 'IntersectionObserver' in window
   ? new IntersectionObserver(entries => {
       for (const e of entries){
-        if (e.isIntersecting) e.target.classList.add('in');
+        const el = e.target;
+        if (e.isIntersecting){
+          el.classList.add('in');
+          if (el.classList.contains('stats')) el.querySelectorAll('b').forEach(count);
+        }
         // only reset once it is properly gone, or it flickers at the edges
-        else if (e.boundingClientRect.top > window.innerHeight ||
-                 e.boundingClientRect.bottom < 0) e.target.classList.remove('in');
+        else if (e.boundingClientRect.top > window.innerHeight){
+          el.classList.remove('in'); park(el, 1);    // left below: it will rise
+        } else if (e.boundingClientRect.bottom < 0){
+          el.classList.remove('in'); park(el, -1);   // left above: it will descend
+        }
       }
     }, { rootMargin:'0px 0px -10% 0px', threshold:[0, 0.08] })
   : null;
 
 document.querySelectorAll('[data-reveal]').forEach(n => {
+  // The hero belongs to the overture below. Left to the observer it would open
+  // on the first frame -- before the fonts land, and ahead of the nav that is
+  // supposed to lead it.
+  if (n === hero) return;
   if (io) io.observe(n); else n.classList.add('in');
 });
+
+/* ================= the overture =================
+ * The bar frames the page, so it arrives first and the hero follows underneath
+ * it. Waiting on the webfonts means the headline rises already set in the
+ * serif rather than swapping face mid-movement; the timeout is there because a
+ * font that never resolves must not cost us the whole opening. */
+function overture(){
+  if (nav) nav.classList.add('lit');
+  if (hero) hero.classList.add('in');
+}
+let opened = false;
+const openOnce = () => { if (!opened){ opened = true; overture(); } };
+
+if (document.fonts && document.fonts.ready){
+  document.fonts.ready.then(() => requestAnimationFrame(openOnce));
+  setTimeout(openOnce, 900);
+} else {
+  requestAnimationFrame(openOnce);
+}
 
 })();
