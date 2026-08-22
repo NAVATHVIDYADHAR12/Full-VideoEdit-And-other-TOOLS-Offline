@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "setup": "node fetch-vendor.js"
+    "setup": "node fetch-vendor.js",
+    "test": "node test/auth.test.js",
+    "kv": "node test/fake-kv.js"
   },
   "keywords": [],
   "author": "",

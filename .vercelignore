@@ -5,6 +5,7 @@ node_modules/
 server.js
 start.bat
 fetch-vendor.js
+test/
 
 # the ffmpeg engine is loaded from the CDN when hosted
 vendor/

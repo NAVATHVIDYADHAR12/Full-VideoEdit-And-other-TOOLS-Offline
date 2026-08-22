@@ -964,29 +964,36 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .authwrap.open{ opacity:1; pointer-events:auto; }
 
 .authcard{
-  position:relative; width:min(430px, 100%);
-  max-height:calc(100vh - 44px); overflow-y:auto;
+  position:relative; width:min(392px, 100%);
+  /* It must fit. The dialog is short enough on any ordinary screen that the
+     overflow never engages; it stays as auto for landscape phones, where the
+     alternative is content nobody can reach. The bar itself is hidden because
+     a scrollbar inside a small dialog reads as a mistake. */
+  max-height:calc(100vh - 28px); overflow-y:auto;
+  scrollbar-width:none; -ms-overflow-style:none;
   background:var(--panel); border:1px solid var(--line); border-radius:2px;
   box-shadow:0 40px 100px rgba(0,0,0,.7);
-  padding:30px 30px 28px;
+  padding:24px 26px 22px;
   transform:translateY(12px) scale(.985);
-  transition:transform .38s cubic-bezier(.22,.61,.36,1);
+  transition:transform .38s var(--eo);
 }
+.authcard::-webkit-scrollbar{ width:0; height:0; }
 .authwrap.open .authcard{ transform:none; }
 
 .authclose{
-  position:absolute; top:14px; right:14px;
+  position:absolute; top:10px; right:11px;
   background:none !important; border:0 !important; color:var(--dim) !important;
-  font-size:23px !important; line-height:1; padding:2px 7px !important; cursor:pointer;
+  font-size:21px !important; line-height:1; padding:2px 6px !important; cursor:pointer;
+  transition:color .3s ease;
 }
 .authclose:hover{ color:var(--text) !important; }
 
-.authtabs{ display:flex; gap:0; border-bottom:1px solid var(--line); margin-bottom:24px; }
+.authtabs{ display:flex; gap:0; border-bottom:1px solid var(--line); margin-bottom:17px; }
 .atab{
-  flex:1 1 0; padding:11px 8px !important; border-radius:0 !important;
+  flex:1 1 0; padding:9px 8px !important; border-radius:0 !important;
   background:transparent !important; border:0 !important;
   border-bottom:1px solid transparent !important;
-  color:var(--dim) !important; font-size:12px !important; font-weight:600 !important;
+  color:var(--dim) !important; font-size:11px !important; font-weight:600 !important;
   letter-spacing:.14em; text-transform:uppercase; cursor:pointer;
   transition:color .3s ease, border-color .3s ease;
   margin-bottom:-1px;
@@ -994,40 +1001,73 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 .atab.on{ color:var(--accent) !important; border-bottom-color:var(--accent) !important; }
 
 .authbody h3{
-  font-family:var(--serif); font-weight:400; font-size:1.6rem;
-  color:var(--text); margin:0 0 6px; letter-spacing:-.01em;
+  font-family:var(--serif); font-weight:400; font-size:1.32rem;
+  color:var(--text); margin:0 0 5px; letter-spacing:-.01em;
 }
-.asub{ color:var(--dim); font-size:.88rem; margin:0 0 18px; font-weight:300; }
+.asub{ color:var(--dim); font-size:.82rem; line-height:1.55; margin:0 0 15px; font-weight:300; }
 
-/* said before anything is typed, not after */
+/* only ever seen on a deployment whose database is not wired up */
 .anotice{
   background:var(--burgundy); border:1px solid #4d1a22; border-radius:2px;
-  padding:12px 14px; margin-bottom:22px;
-  font-size:12.5px; line-height:1.65; color:#E7C7B6; font-weight:300;
+  padding:9px 11px; margin-bottom:14px;
+  font-size:11.5px; line-height:1.55; color:#E7C7B6; font-weight:300;
 }
 .anotice b{ color:#F4D9C8; font-weight:600; }
 
-.afield{ display:block; margin-bottom:15px; }
+.aform{ margin:0; }        /* forms carry a default margin; it would show here */
+.afield{ display:block; margin-bottom:11px; }
 .afield > span{
-  display:block; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
-  color:var(--dim); font-weight:600; margin-bottom:6px;
+  display:block; font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--dim); font-weight:600; margin-bottom:5px;
 }
 .afield input{
-  width:100%; padding:11px 13px; background:var(--panel2);
+  width:100%; padding:10px 12px; background:var(--panel2);
   border:1px solid var(--line); border-radius:2px; color:var(--text);
-  font:400 14px var(--sans);
+  font:400 13.5px var(--sans);
+  transition:border-color .3s ease;
 }
 .afield input:focus{ outline:none; border-color:var(--accent); }
-.afield small{ display:block; color:var(--dim); font-size:11px; margin-top:5px; }
+.afield small{ display:block; color:var(--dim); font-size:10.5px; margin-top:4px; }
+
+/* Reserves no space until it has something to say, so the card does not grow
+   a gap it never uses. */
+.aerr{
+  margin:0 0 10px; padding:8px 10px; border-radius:2px;
+  background:rgba(199,123,114,.10); border:1px solid rgba(199,123,114,.42);
+  color:var(--err); font-size:12px; line-height:1.5; font-weight:400;
+}
+.aerr[hidden]{ display:none; }
 
 .asubmit{
-  width:100%; margin-top:8px; padding:13px !important; border-radius:2px !important;
-  font-size:12.5px !important; font-weight:700 !important;
+  width:100%; margin-top:4px; padding:12px !important; border-radius:2px !important;
+  font-size:12px !important; font-weight:700 !important;
   letter-spacing:.08em; text-transform:uppercase;
 }
-.aswap{ text-align:center; color:var(--dim); font-size:12.5px; margin:18px 0 0; font-weight:300; }
+.asubmit:disabled{ opacity:.6; cursor:progress; }
+.aswap{ text-align:center; color:var(--dim); font-size:12px; margin:13px 0 0; font-weight:300; }
 .aswap a{ color:var(--accent); text-decoration:none; }
 .aswap a:hover{ text-decoration:underline; }
+
+/* ---------- who is signed in, in the menu ---------- */
+.mwho{
+  display:flex; align-items:center; gap:11px;
+  padding:11px 14px; border-bottom:1px solid var(--line);
+}
+.mwho span{ min-width:0; }
+.mwho b{
+  display:block; color:var(--text); font-size:13px; font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.mwho small{
+  display:block; color:var(--dim); font-size:11px; margin-top:2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.mavatar{
+  flex:0 0 auto; width:30px; height:30px; border-radius:50%;
+  display:grid; place-items:center;
+  background:var(--panel2); border:1px solid var(--accent);
+  color:var(--accent); font-family:var(--serif); font-size:15px; line-height:1;
+}
 
 /* ================= pricing ================= */
 .plans{

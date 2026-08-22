@@ -3,22 +3,20 @@
  * Injected rather than written into every page, so the menu cannot drift
  * between the landing page and the collection page.
  *
- * IMPORTANT, AND DELIBERATE: the sign-up and log-in forms are a design, not a
- * working account system. This site is static — there is no server, no database
- * and no session. Wiring these fields to browser storage would look like it
- * worked while protecting nothing, and would invite people to type a password
- * they use elsewhere. So the fields are inert and say so.
+ * The forms are real. They post to the serverless endpoints in /api, which hold
+ * passwords as scrypt hashes and hand back an HttpOnly session cookie. Nothing
+ * sensitive is kept in this file or in browser storage: the cookie is invisible
+ * to script by design, so the only way to know who is signed in is to ask the
+ * server, which is what refresh() does on load.
  *
- * TO MAKE ACCOUNTS REAL, replace the two functions marked BACKEND below with
- * calls to whichever provider you choose. Nothing else here needs to change.
+ * The ten tools do not use any of this. They run offline and need no account;
+ * an account exists only for plans and for whatever ships next.
  */
 (function () {
 'use strict';
 
 const nav = document.getElementById('nav');
 if (!nav) return;
-
-const ACCOUNTS_LIVE = false;      // flip to true once a real backend is wired in
 
 /* ================= the button ================= */
 const burger = document.createElement('button');
@@ -35,6 +33,7 @@ const menu = document.createElement('div');
 menu.className = 'navmenu';
 menu.id = 'navmenu';
 menu.innerHTML =
+  '<div class="mauth">' +
   '<button type="button" class="mitem" data-account="signup">' +
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
       '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>' +
@@ -45,6 +44,7 @@ menu.innerHTML =
       '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>' +
       '<path d="M10 17l5-5-5-5M15 12H3"/></svg>' +
     '<span><b>Log in</b><small>Return to your account</small></span></button>' +
+  '</div>' +
   '<div class="msep"></div>' +
   '<a class="mitem" href="pricing.html">' +
     '<svg viewBox="0 0 24 24" aria-hidden="true">' +
@@ -75,7 +75,68 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && open) setMenu(false); });
 
 /* ================= account screens ================= */
-let modal = null, titleEl = null, bodyEl = null, tabs = null;
+const authArea = menu.querySelector('.mauth');
+const signedOutHTML = authArea.innerHTML;
+
+/* The cookie is HttpOnly, so this is the only copy of "who is signed in" the
+   page has, and it is a cache of the server's answer rather than the truth. */
+let state = { user: null, accounts: true };
+
+function icon(d){
+  return '<svg viewBox="0 0 24 24" aria-hidden="true">' + d + '</svg>';
+}
+
+function paintMenu(){
+  if (!state.user){ authArea.innerHTML = signedOutHTML; bindAccountButtons(); return; }
+
+  const initial = (state.user.name || state.user.email || '?').trim().charAt(0).toUpperCase();
+  authArea.innerHTML =
+    '<div class="mwho">' +
+      '<span class="mavatar" aria-hidden="true">' + initial + '</span>' +
+      '<span><b>' + esc(state.user.name) + '</b>' +
+      '<small>' + esc(state.user.email) + '</small></span>' +
+    '</div>' +
+    '<button type="button" class="mitem" data-logout>' +
+      icon('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>' +
+           '<path d="M16 17l5-5-5-5M21 12H9"/>') +
+      '<span><b>Log out</b><small>End this session</small></span></button>';
+
+  authArea.querySelector('[data-logout]').addEventListener('click', async () => {
+    setMenu(false);
+    try { await fetch('/api/logout', { method:'POST', credentials:'same-origin' }); }
+    catch (err) { /* the cookie is cleared server-side or not at all; either way, re-ask */ }
+    await refresh();
+  });
+}
+
+function bindAccountButtons(){
+  authArea.querySelectorAll('[data-account]').forEach(btn => {
+    btn.addEventListener('click', () => { setMenu(false); render(btn.dataset.account); });
+  });
+}
+
+/** Ask the server who this is. Runs on load, and after every change. */
+async function refresh(){
+  try {
+    const res  = await fetch('/api/me', { credentials:'same-origin' });
+    const data = await res.json();
+    state.user     = data.user || null;
+    state.accounts = data.accounts !== false;
+  } catch (err) {
+    // Offline is the normal case for this app, and it is not a failure: the
+    // tools all work without the network. Present it as simply signed out.
+    state.user = null;
+  }
+  paintMenu();
+  return state.user;
+}
+
+const esc = str => String(str == null ? '' : str)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/* ================= the dialog ================= */
+let modal = null, bodyEl = null, tabs = null;
 
 function build(){
   if (modal) return;
@@ -93,7 +154,7 @@ function build(){
   document.body.appendChild(modal);
 
   bodyEl = modal.querySelector('.authbody');
-  tabs = [...modal.querySelectorAll('.atab')];
+  tabs = [].slice.call(modal.querySelectorAll('.atab'));
   tabs.forEach(t => t.addEventListener('click', () => render(t.dataset.tab)));
   modal.querySelector('.authclose').addEventListener('click', closeAuth);
   modal.addEventListener('click', e => { if (e.target === modal) closeAuth(); });
@@ -102,39 +163,40 @@ function build(){
   });
 }
 
-function field(id, label, type, hint){
-  return '<label class="afield"><span>' + label + '</span>' +
-    '<input id="' + id + '" type="' + type + '" ' +
-    (ACCOUNTS_LIVE ? '' : 'disabled ') +
-    'autocomplete="off">' +
+/* autocomplete is switched on deliberately. The old form said "off", which
+   stops a password manager offering a strong password and pushes people
+   towards one they can retype -- the opposite of what it looks like. */
+function field(id, label, type, complete, hint){
+  return '<label class="afield" for="' + id + '"><span>' + label + '</span>' +
+    '<input id="' + id + '" name="' + id + '" type="' + type + '" ' +
+    'autocomplete="' + complete + '" required>' +
     (hint ? '<small>' + hint + '</small>' : '') + '</label>';
 }
 
 function render(which){
   build();
-  tabs.forEach(t => t.classList.toggle('on', t.dataset.tab === which));
+  const isSignup = which !== 'login';
+  tabs.forEach(t => t.classList.toggle('on', (t.dataset.tab === 'signup') === isSignup));
 
-  const isSignup = which === 'signup';
   bodyEl.innerHTML =
     '<h3>' + (isSignup ? 'Create an account' : 'Welcome back') + '</h3>' +
     '<p class="asub">' + (isSignup
-      ? 'One account for the plans and for whatever ships next.'
+      ? 'For plans and for whatever ships next. The ten tools stay free and need no account.'
       : 'Sign in to manage your plan.') + '</p>' +
 
-    /* Said plainly, at the top, before anyone types anything. */
-    '<div class="anotice">' +
-      '<b>Accounts are not live yet.</b> This is the design, not a working ' +
-      'sign-in. The ten tools need no account and are free to use today — ' +
-      'they run entirely on your machine.' +
-    '</div>' +
+    (state.accounts ? '' :
+      '<div class="anotice">Accounts are not configured on this deployment yet.</div>') +
 
-    (isSignup ? field('acc-name', 'Name', 'text', '') : '') +
-    field('acc-email', 'Email', 'email', '') +
-    field('acc-pass', 'Password', 'password',
-          isSignup ? 'At least 10 characters.' : '') +
-
-    '<button type="button" class="asubmit" disabled>' +
-      (isSignup ? 'Create account' : 'Log in') + '</button>' +
+    '<form class="aform" novalidate>' +
+      (isSignup ? field('acc-name', 'Name', 'text', 'name', '') : '') +
+      field('acc-email', 'Email', 'email', 'email', '') +
+      field('acc-pass', 'Password', 'password',
+            isSignup ? 'new-password' : 'current-password',
+            isSignup ? 'At least 10 characters.' : '') +
+      '<p class="aerr" role="alert" hidden></p>' +
+      '<button type="submit" class="asubmit">' +
+        (isSignup ? 'Create account' : 'Log in') + '</button>' +
+    '</form>' +
 
     '<p class="aswap">' + (isSignup
       ? 'Already have one? <a href="#" data-tab-to="login">Log in</a>'
@@ -143,9 +205,58 @@ function render(which){
   bodyEl.querySelectorAll('[data-tab-to]').forEach(a => {
     a.addEventListener('click', e => { e.preventDefault(); render(a.dataset.tabTo); });
   });
+  bodyEl.querySelector('.aform').addEventListener('submit', e => {
+    e.preventDefault();
+    submit(isSignup);
+  });
 
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+  // focus the first empty field, so the keyboard lands where typing starts
+  const first = bodyEl.querySelector('input');
+  if (first) setTimeout(() => first.focus(), 60);
+}
+
+async function submit(isSignup){
+  const form   = bodyEl.querySelector('.aform');
+  const button = form.querySelector('.asubmit');
+  const errEl  = form.querySelector('.aerr');
+  const value  = id => { const el = bodyEl.querySelector('#' + id); return el ? el.value : ''; };
+
+  const payload = isSignup
+    ? { name: value('acc-name'), email: value('acc-email'), password: value('acc-pass') }
+    : { email: value('acc-email'), password: value('acc-pass') };
+
+  errEl.hidden = true;
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = isSignup ? 'Creating\u2026' : 'Signing in\u2026';
+
+  try {
+    const res = await fetch(isSignup ? '/api/signup' : '/api/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok){
+      errEl.textContent = data.error || 'Something went wrong. Please try again.';
+      errEl.hidden = false;
+      return;
+    }
+    state.user = data.user;
+    paintMenu();
+    closeAuth();
+
+  } catch (err) {
+    errEl.textContent = 'Could not reach the server. Check your connection and try again.';
+    errEl.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
 }
 
 function closeAuth(){
@@ -154,32 +265,14 @@ function closeAuth(){
   document.body.style.overflow = '';
 }
 
-menu.querySelectorAll('[data-account]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    setMenu(false);
-    render(btn.dataset.account);
-  });
-});
+bindAccountButtons();
+refresh();
 
-/* =============================================================================
- *  BACKEND — the only two places that need to change.
- *
- *  Both are unimplemented on purpose. A static site cannot hold a session or a
- *  password safely, and a fake one is worse than none: it looks trustworthy
- *  while protecting nothing.
- *
- *  When a provider is chosen, implement these two, set ACCOUNTS_LIVE to true at
- *  the top of this file, and the forms above become live as they are.
- * ========================================================================== */
-
-async function signUp(/* name, email, password */){
-  throw new Error('No authentication backend is configured.');
-}
-
-async function logIn(/* email, password */){
-  throw new Error('No authentication backend is configured.');
-}
-
-window.Account = { signUp, logIn, open: render, close: closeAuth, live: ACCOUNTS_LIVE };
+window.Account = {
+  open: render,
+  close: closeAuth,
+  refresh,
+  get user(){ return state.user; },
+};
 
 })();

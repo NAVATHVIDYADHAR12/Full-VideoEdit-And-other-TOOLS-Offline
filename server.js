@@ -42,8 +42,47 @@ const MIME = {
   '.txt' :'text/plain; charset=utf-8',
 };
 
+/* Vercel runs everything in /api as a function; this server does not, so it
+   would serve the source of the login endpoint as a file and 404 the route.
+   Dispatching them here means the account screens can be exercised locally on
+   exactly the same URLs they use in production. */
+function runApi(req, res, route){
+  const file = path.join(ROOT, 'api', route + '.js');
+  if (!file.startsWith(path.join(ROOT, 'api')) || !fs.existsSync(file)){
+    res.writeHead(404, { 'Content-Type':'application/json' })
+       .end(JSON.stringify({ error:'No such endpoint.' }));
+    return;
+  }
+  let handler;
+  try {
+    // cleared each time so editing an endpoint does not need a restart
+    delete require.cache[require.resolve(file)];
+    handler = require(file);
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type':'application/json' })
+       .end(JSON.stringify({ error:'Endpoint failed to load: ' + err.message }));
+    return;
+  }
+  Promise.resolve(handler(req, res)).catch(err => {
+    console.error('  api/' + route + ' threw:', err);
+    if (!res.headersSent){
+      res.writeHead(500, { 'Content-Type':'application/json' })
+         .end(JSON.stringify({ error:'Server error.' }));
+    }
+  });
+}
+
 const server = http.createServer((req, res) => {
   let rel = decodeURIComponent(req.url.split('?')[0]);
+
+  const api = rel.match(/^\/api\/([A-Za-z0-9_-]+)\/?$/);
+  if (api){ runApi(req, res, api[1]); return; }
+  if (rel === '/api' || rel.startsWith('/api/')){
+    res.writeHead(404, { 'Content-Type':'application/json' })
+       .end(JSON.stringify({ error:'No such endpoint.' }));
+    return;
+  }
+
   if (rel === '/') rel = '/index.html';
 
   // never serve anything outside the project folder
