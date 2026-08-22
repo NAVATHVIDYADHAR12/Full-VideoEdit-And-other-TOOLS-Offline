@@ -136,14 +136,22 @@ a.btn-ghost{ display:inline-flex; align-items:center; justify-content:center;
 }
 .herostage canvas{
   position:absolute; inset:0; width:100%; height:100%;
-  object-fit:cover; opacity:.34;
+  object-fit:cover; opacity:var(--hero-frames, .28);
 }
-/* keeps the type readable over any frame and stops the video fighting the words */
+/* Keeps the type readable over any frame and stops the footage fighting the
+   words. Two tokens carry the weight, so the balance can be tuned without
+   unpicking the gradients: --hero-frames is how much footage shows through,
+   --hero-veil how hard the darkness is pressed over it. The frames are meant
+   to read as a texture behind the headline, never as a picture beside it. */
 .herostage::after{
   content:''; position:absolute; inset:0; pointer-events:none;
   background:
-    radial-gradient(120% 90% at 50% 40%, transparent 0%, rgba(8,8,8,.55) 55%, #080808 100%),
-    linear-gradient(180deg, rgba(8,8,8,.9) 0%, transparent 22%, transparent 70%, #080808 100%);
+    radial-gradient(120% 90% at 50% 40%,
+      rgba(8,8,8,calc(var(--hero-veil, .66) * .24)) 0%,
+      rgba(8,8,8,var(--hero-veil, .66)) 55%,
+      #080808 100%),
+    linear-gradient(180deg, rgba(8,8,8,.95) 0%, rgba(8,8,8,.12) 24%,
+      rgba(8,8,8,.24) 68%, #080808 100%);
 }
 .heroinner{ position:relative; z-index:2; text-align:center; }
 .heroinner .display{ margin-inline:auto; }
