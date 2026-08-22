@@ -20,15 +20,25 @@ you think looks right, the file wins. Change it deliberately or not at all.
 
 These are not style preferences. Breaking one of these is a defect.
 
-**0.1 Nothing may claim to work when it does not.** This site is static. There is
-no server, no database, no session. So:
+**0.1 Nothing may claim to work when it does not.** The tools are static and run
+on the visitor's machine; the only server-side thing on the site is the account.
+So:
 
-- The sign-up and log-in forms are **a design, not an account system**. Fields
-  are `disabled`. A notice sits above them saying so in plain words. There is a
-  single flag, `ACCOUNTS_LIVE = false`, and two functions that throw. Wiring them
-  to `localStorage` would look like it worked while protecting nothing, and would
-  invite someone to type a password they use elsewhere. **Never store a password
-  anywhere, in any form, including browser storage.**
+- The sign-up and log-in forms are **real, or they say they are not**. They post
+  to serverless endpoints that hold passwords as scrypt hashes and issue an
+  HttpOnly session cookie. Where no database is configured the endpoints report
+  that plainly and the dialog says accounts are not set up on this deployment —
+  it does not fail with a stack trace, and it does not pretend.
+- **Never store a password anywhere on the client, in any form, including
+  browser storage, and never keep the session where script can read it.** The
+  cookie is HttpOnly precisely so the page cannot; the only way to know who is
+  signed in is to ask the server, which is what the page does on load. An
+  account system faked in `localStorage` looks like it works while protecting
+  nothing, and invites someone to type a password they use elsewhere.
+- **The ten tools still need no account.** That is what keeps the privacy claim
+  honest while a login exists: the tools upload nothing and never touch the
+  network, and the account exists only for plans. The hero copy must stay scoped
+  to the tools, not to the site.
 - Ratings are **not fabricated**. The breakdown is all zeros with an honest empty
   state. Do not seed it with plausible-looking numbers.
 - Payments are not live, and the pricing page says so.
@@ -664,8 +674,9 @@ headline sitting over them.
 
 - The outer section is `height:340vh`; that is the scroll distance, and the
   sticky stage stays put while it passes.
-- The canvas is `object-fit:cover` at `opacity:.34` — the frames are a texture
-  behind the headline, never a picture competing with it.
+- The canvas is `object-fit:cover` at `opacity:var(--hero-frames, .28)` — the
+  frames are a texture behind the headline, never a picture competing with it.
+  See 8.2, which is what keeps that true.
 - Frames draw to a **`<canvas>`**, not an `<img>`. This matters beyond
   performance: it means a blanket `img{cursor:default}` rule cannot accidentally
   kill the wave across the entire hero.
@@ -707,6 +718,85 @@ Order, because the bar frames everything under it:
   irritating rather than luxurious.
 - The sheen across the gold button runs once, on arrival, and never again. A
   looping shine is the fastest way to look cheap.
+
+---
+
+### 8.2 The veil
+
+The frames sit under two things: their own opacity, and a veil drawn over them
+by `.herostage::after`. Both are tokens, because this is the one balance on the
+page that gets adjusted by eye and should never need the gradients unpicked:
+
+```css
+.herostage canvas{ opacity:var(--hero-frames, .28); }
+
+.herostage::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(120% 90% at 50% 40%,
+      rgba(8,8,8,calc(var(--hero-veil, .66) * .24)) 0%,
+      rgba(8,8,8,var(--hero-veil, .66)) 55%,
+      #080808 100%),
+    linear-gradient(180deg, rgba(8,8,8,.95) 0%, rgba(8,8,8,.12) 24%,
+      rgba(8,8,8,.24) 68%, #080808 100%);
+}
+```
+
+**The centre must not be left bare.** The first version of this ran the radial
+from fully transparent, which put the *least* darkness exactly where the
+headline sits. The centre now carries a light wash — a fraction of the veil
+rather than none of it — and the gradient deepens outward from there.
+
+**Judge it by number, not by feel.** Composite a bright frame value through the
+opacity and then the veil, and read the contrast off the result:
+
+| over a bright frame, dead centre | ivory headline | gold italic |
+|---|---|---|
+| bare centre, frames at `.34` | 7.8:1 | 3.7:1 |
+| veiled centre, frames at `.28` | 10.7:1 | **5.0:1** |
+
+The gold is the number that matters: at `3.7:1` it only passed AA, and it is the
+accent the whole palette is built around. The veil is what moves it to AAA.
+
+It is also easy to overshoot. A first attempt at "a little darker" measured 43%
+down and read as switching the footage off rather than pressing it back. The
+shipped value is 27%. If it needs to move again, move `--hero-veil` and measure
+again; do not reach for the gradients.
+
+### 8.3 The dissolving lede
+
+The copy does not fade out as a block. It comes apart a letter at a time, from
+the end backwards, so the hero reads as being consumed by the footage rather
+than merely dimmed.
+
+```css
+.lede.is-split .wd{ display:inline-block; white-space:nowrap; }
+.lede.is-split .ch{ display:inline-block;
+  transition:opacity .5s var(--eo2), transform .5s var(--eo2), filter .5s var(--eo2); }
+.lede.is-split .ch.gone{
+  opacity:0; transform:translateY(10px) scale(.94); filter:blur(3px); }
+```
+
+- **Wrap words whole, address letters.** Each word is one `inline-block` and the
+  letters live inside it, with **real space text nodes between the words**. Split
+  on characters alone and every space becomes a wrap opportunity, so the
+  paragraph re-flows into ragged nonsense.
+- **Reverse document order is what produces "from the bottom".** The last line
+  goes first, unravelling from its end, and the sentence retreats upward toward
+  the headline. No geometry is measured; the DOM order already knows.
+- **Leave downward and blurred.** Falling and defocusing reads as absorption.
+  Fading straight out reads as a switch being thrown.
+- **Finish before the block fade.** The dissolve runs `.12` to `.55` of the
+  scrub and the headline's own fade starts at `.60`. Overlapping them means two
+  fades fighting on the same text.
+- **Touch only what changed.** Track how many glyphs *should* be hidden and move
+  the boundary; do not write a style to all 176 of them every frame to
+  accomplish a handful of visible changes.
+- **No `will-change` here.** Promoting every glyph asks the compositor for 176
+  layers and saves nothing. This is the exception to the usual advice, and it is
+  the number of elements that makes it one.
+- It must reverse. Scroll back up and the sentence returns, intact.
+- Reduced motion skips the split altogether and leaves the paragraph alone.
 
 ---
 
@@ -804,6 +894,25 @@ ring maths for every collection size from 2 to 10, not just the size you have.
 directions above the footer. Duplicate the track exactly and translate by `-50%`
 for a seamless loop. `aria-hidden="true"` — it is decoration. Deliberately keeps
 the bubble cursor: it is a moving backdrop, not a card.
+
+**The account dialog.** A centred card, `min(392px, 100%)`, over a blurred
+scrim.
+
+- **It has to fit.** Sign-up is the tall one — tabs, heading, sub, three fields,
+  a hint, a button and a swap link — and it must clear an ordinary laptop
+  window without scrolling. Ours measures 475px. Add a row and measure again;
+  the failure mode is a scrollbar inside a small dialog, which reads as a
+  mistake rather than as a feature.
+- `overflow-y` stays `auto` for landscape phones, where the alternative is
+  content nobody can reach, but the bar itself is hidden
+  (`scrollbar-width:none` plus the `::-webkit-scrollbar` rule).
+- **It is a real `<form>`**, so Enter submits and the browser can autofill.
+- **`autocomplete` is on**, with `new-password` on sign-up and
+  `current-password` on log in. The obvious-looking `autocomplete="off"` stops a
+  password manager offering a generated password and pushes people toward one
+  they can retype, which is the opposite of what it appears to do.
+- The error line lives inside the form, `hidden` until it has something to say,
+  so the card does not reserve a gap it never uses.
 
 **Floating actions.** Back-to-top and the assistant, bottom-right, 50px, square,
 frosted:
@@ -969,6 +1078,10 @@ Design is not done until every line passes.
 - [ ] The page **opens**: nav, then hero, in that order, on load — no block
       hardcoded `in` in the markup.
 - [ ] Headings rise from masked lines, with descenders and italics uncut.
+- [ ] The hero veil darkens the centre, not only the edges, and the gold italic
+      measures at least 4.5:1 over a bright frame.
+- [ ] The hero lede comes apart letter by letter from the end, reverses on the
+      way back up, and never overlaps the headline's own fade.
 - [ ] Grids of like items arrive one at a time, never as a block.
 - [ ] Counters climb from zero, keep their suffix, land on the authored text,
       and leave a genuine zero alone.
@@ -985,5 +1098,7 @@ Design is not done until every line passes.
 - [ ] Nothing at all is injected on a phone or tablet.
 - [ ] Animation loop parks when idle.
 - [ ] No horizontal scrollbar at 320px, 768px, 1180px, 1920px.
-- [ ] Auth is inert and says so; ratings are not fabricated; payments are
-      declared not live.
+- [ ] Auth is real, or says plainly that it is not configured — never faked,
+      and no password or session is ever held on the client.
+- [ ] The ten tools still need no account, and the copy says so in those words.
+- [ ] Ratings are not fabricated; payments are declared not live.
