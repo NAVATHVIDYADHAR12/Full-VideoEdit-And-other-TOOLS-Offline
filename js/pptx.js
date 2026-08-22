@@ -382,44 +382,72 @@ async function toPdf(bytes, opt, onProg){
   const notes = { skipped:0, images:0, badImages:0, tables:0, dropped:{ n:0 } };
   const imgCache = new Map();
 
-  for (let i = 0; i < order.length; i++){
-    const partName = order[i];
-    const doc = parseXml(files.get(partName));
-    if (!doc){ notes.skipped++; continue; }
+  /* ---- memoised parts ---------------------------------------------------
+     Nothing below depends on which slide is being drawn, and a deck typically
+     has one master and a handful of layouts shared by every slide. */
+  const xmlCache = new Map(), relCache = new Map(), chainCache = new Map();
+  const xml = name => {
+    if (!name) return null;
+    if (!xmlCache.has(name)) xmlCache.set(name, parseXml(files.get(name)));
+    return xmlCache.get(name);
+  };
+  const rlsOf = name => {
+    if (!relCache.has(name)) relCache.set(name, relsFor(files, name));
+    return relCache.get(name);
+  };
+  const breathe = () => (root.Core && root.Core.idle) ? root.Core.idle() : Promise.resolve();
 
-    const rels = relsFor(files, partName);
+  function layoutChain(layoutPart){
+    const key = layoutPart || '';
+    if (chainCache.has(key)) return chainCache.get(key);
 
-    /* layout -> master, for placeholder geometry, theme and background */
-    let layoutDoc = null, layoutPart = null, masterDoc = null, masterPart = null;
-    for (const [, rel] of rels){
-      if (rel.type && rel.type.endsWith('/slideLayout')){
-        layoutPart = resolvePath(partName, rel.target);
-        layoutDoc = parseXml(files.get(layoutPart));
-      }
-    }
+    const layoutDoc = xml(layoutPart);
+    let masterPart = null;
     if (layoutDoc){
-      for (const [, rel] of relsFor(files, layoutPart)){
-        if (rel.type && rel.type.endsWith('/slideMaster')){
-          masterPart = resolvePath(layoutPart, rel.target);
-          masterDoc = parseXml(files.get(masterPart));
-        }
+      for (const [, rel] of rlsOf(layoutPart)){
+        if (rel.type && rel.type.endsWith('/slideMaster')) masterPart = resolvePath(layoutPart, rel.target);
       }
     }
+    const masterDoc = xml(masterPart);
+
     let theme = {};
     if (masterDoc){
-      for (const [, rel] of relsFor(files, masterPart)){
+      for (const [, rel] of rlsOf(masterPart)){
         if (rel.type && rel.type.endsWith('/theme')){
-          const t = parseXml(files.get(resolvePath(masterPart, rel.target)));
+          const t = xml(resolvePath(masterPart, rel.target));
           if (t) theme = themeColors(t);
         }
       }
     }
+    const out = {
+      layoutDoc, layoutPart, masterDoc, masterPart, theme,
+      phLayout: placeholderMap(layoutDoc),
+      phMaster: placeholderMap(masterDoc),
+      txStyles: txStylesOf(masterDoc),
+    };
+    chainCache.set(key, out);
+    return out;
+  }
 
-    const phLayout = placeholderMap(layoutDoc);
-    const phMaster = placeholderMap(masterDoc);
+  for (let i = 0; i < order.length; i++){
+    const partName = order[i];
+    const doc = xml(partName);
+    if (!doc){ notes.skipped++; continue; }
+
+    const rels = rlsOf(partName);
+
+    /* Slides share layouts, and every layout shares one master. Resolving this
+       chain per slide meant re-parsing the master -- usually the largest part
+       in the file -- and rebuilding its placeholder map and text styles once
+       per slide. All of it is keyed by part name and computed once. */
+    let layoutPart = null;
+    for (const [, rel] of rels){
+      if (rel.type && rel.type.endsWith('/slideLayout')) layoutPart = resolvePath(partName, rel.target);
+    }
+    const chain = layoutChain(layoutPart);
+    const { layoutDoc, masterDoc, masterPart, theme, phLayout, phMaster, txStyles } = chain;
 
     const page = pdf.addPage([SW, SH]);
-    const txStyles = txStylesOf(masterDoc);
     const base = { pdf, page, rgb, degrees, F, theme, files,
                    phLayout, phMaster, SW, SH, notes, imgCache, txStyles };
 
@@ -442,7 +470,7 @@ async function toPdf(bytes, opt, onProg){
       const tree = find(part, 'p', 'spTree');
       if (!tree) continue;
       const ctx = Object.assign({}, base, {
-        rels: name === partName ? rels : relsFor(files, name),
+        rels: name === partName ? rels : rlsOf(name),
         partName: name,
         skipPh: name !== partName,      // only the slide's placeholders hold content
       });
@@ -450,7 +478,9 @@ async function toPdf(bytes, opt, onProg){
     }
 
     prog((i + 1) / order.length);
-    if (i % 4 === 3 && root.Core && root.Core.idle) await root.Core.idle();
+    // Every slide, not every fourth: a deck of heavy slides would otherwise
+    // hold the main thread long enough for the page to stop responding.
+    await breathe();
   }
 
   const out = await pdf.save();
@@ -585,6 +615,9 @@ async function drawPicture(pic, ctx, T){
 
   let img = ctx.imgCache.get(path);
   if (img === undefined){
+    // Embedding is the single slowest thing here -- a large PNG has to be
+    // decoded and re-encoded -- so let the page breathe before each new one.
+    if (root.Core && root.Core.idle) await root.Core.idle();
     img = null;
     try {
       // sniff the bytes, not the extension: decks routinely mislabel these
@@ -812,18 +845,24 @@ async function probe(bytes){
     if (/^ppt\/media\//.test(name)) media++;
   }
   const w = num(sz, 'cx', 9144000) / PT, h = num(sz, 'cy', 6858000) / PT;
+  const counts = scanSlides(files);
   return { slides, media, width:w, height:h,
            ratio: (w/h > 1.5) ? '16:9' : (Math.abs(w/h - 4/3) < 0.05 ? '4:3' : (w/h).toFixed(2)+':1'),
-           charts:  countAll(files, /<c:chart|graphicData[^>]*chart/),
-           smartArt:countAll(files, /diagramData|smartArt/) };
+           charts: counts.charts, smartArt: counts.smartArt };
 }
-function countAll(files, re){
-  let n = 0;
+
+/* One pass, decoding each slide once. It used to decode every slide twice --
+   once looking for charts and again for SmartArt -- which on a large deck is
+   several megabytes of needless UTF-8 decoding. */
+function scanSlides(files){
+  let charts = 0, smartArt = 0;
   for (const [name, data] of files){
     if (!/^ppt\/slides\/slide\d+\.xml$/.test(name)) continue;
-    if (re.test(dec.decode(data))) n++;
+    const s = dec.decode(data);
+    if (/<c:chart|graphicData[^>]*chart/.test(s)) charts++;
+    if (/diagramData|smartArt/.test(s)) smartArt++;
   }
-  return n;
+  return { charts, smartArt };
 }
 
 const isPptx = f => /\.pptx$/i.test(f.name || String(f));
